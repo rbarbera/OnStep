@@ -9,6 +9,9 @@
 */
 
 // ---------------------------------------------------------------------------------------------------------------------------------
+
+#define TELESCOPE_COORDINATES OBSERVED_PLACE
+
 // ADJUST THE FOLLOWING TO CONFIGURE YOUR CONTROLLER FEATURES ----------------------------------------------------------------------
 // <-Req'd = always must set, <-Often = usually must set, Option = optional, Adjust = adjust as req'd, Infreq = infrequently changed
 
@@ -17,14 +20,14 @@
 //   *** to be sure it matches your wiring.            *** USE AT YOUR OWN RISK ***                                           ***
 
 //      Parameter Name              Value   Default  Notes                                                                      Hint
-#define PINMAP                        OFF //    OFF, Choose from: MiniPCB, MiniPCB2, MaxPCB, MaxPCB2, STM32Blue,             <-Req'd
+#define PINMAP                       CNC3 //    OFF, Choose from: MiniPCB, MiniPCB2, MaxPCB, MaxPCB2, STM32Blue,             <-Req'd
                                           //         Ramps14, MaxESP2, MaxESP3.  Check Constants.h for more info.
 
 // SERIAL PORTS ---------------------------------------------------- see https://onstep.groups.io/g/main/wiki/6-Configuration#SERIAL
 #define SERIAL_A_BAUD_DEFAULT        9600 //   9600, n. Where n=9600,19200,57600,115200 (common baud rates.)                  Infreq
 #define SERIAL_B_BAUD_DEFAULT        9600 //   9600, n. See (src/HAL/) for your MCU Serial port # etc.                        Option
 #define SERIAL_B_ESP_FLASHING         OFF //    OFF, ON Upload ESP8266 WiFi firmware through SERIAL_B with :ESPFLASH# cmd.    Option
-#define SERIAL_C_BAUD_DEFAULT         OFF //    OFF, n, ON for ESP32 Bluetooth.                                               Option
+#define SERIAL_C_BAUD_DEFAULT          ON //    OFF, n, ON for ESP32 Bluetooth.                                               Option
 #define SERIAL_C_BLUETOOTH_NAME  "OnStep" // "On..", Bluetooth device name for ESP32.                                         Option
 
 // MOUNT TYPE -------------------------------------------------- see https://onstep.groups.io/g/main/wiki/6-Configuration#MOUNT_TYPE
@@ -35,7 +38,7 @@
 #define LED_STATUS                     ON //     ON, Blinks w/sidereal tracking otherwise steady on indicates activity.       Option
 #define LED_STATUS2                   OFF //    OFF, ON Blinks 1s interval w/PPS sync, steady for gotos, off if in standby.   Option
 #define LED_RETICLE                   OFF //    OFF, n. Where n=0..255 (0..100%) activates feature sets default brightness.   Option
-#define BUZZER                        OFF //    OFF, ON, n. Where n=100..6000 (Hz freq.) for piezo speaker. ON for buzzer.    Option
+#define BUZZER                       2000 //    OFF, ON, n. Where n=100..6000 (Hz freq.) for piezo speaker. ON for buzzer.    Option
 #define BUZZER_STATE_DEFAULT          OFF //    OFF, ON Start with piezo buzzer/speaker enabled.                              Option
 
 // TIME AND LOCATION -------------------------------------------------- see https://onstep.groups.io/g/main/wiki/6-Configuration#TLS
@@ -86,7 +89,7 @@
 #define SYNC_CURRENT_PIER_SIDE_ONLY    ON //     ON, Disables ability of sync to change pier side, for GEM mounts.            Option
 
 // SLEWING BEHAVIOUR ---------------------------------------------- see https://onstep.groups.io/g/main/wiki/6-Configuration#SLEWING
-#define SLEW_RATE_BASE_DESIRED        1.0 //    1.0, n. Desired slew rate in deg/sec. Adjustable at run-time from            <-Req'd
+#define SLEW_RATE_BASE_DESIRED        2.0 //    1.0, n. Desired slew rate in deg/sec. Adjustable at run-time from            <-Req'd
                                           //         1/2 to 2x this rate, and as MCU performace considerations require.
 #define SLEW_RATE_MEMORY              OFF //    OFF, ON Remembers rates set across power cycles.                              Option
 #define SLEW_ACCELERATION_DIST        5.0 //    5.0, n, (degrees.) Approx. distance for acceleration (and deceleration.)      Adjust
@@ -111,13 +114,13 @@
 
 // AXIS1 RA/AZM
 // see https://onstep.groups.io/g/main/wiki/6-Configuration#AXIS1
-#define AXIS1_STEPS_PER_DEGREE    12800.0 //  12800, n. Number of steps per degree:                                          <-Req'd
+#define AXIS1_STEPS_PER_DEGREE       9600 //  12800, n. Number of steps per degree:                                          <-Req'd
                                           //         n = (stepper_steps * micro_steps * overall_gear_reduction)/360.0
-#define AXIS1_STEPS_PER_WORMROT     12800 //  12800, n. Number of steps per worm rotation (PEC Eq mode only:)                <-Req'd
+#define AXIS1_STEPS_PER_WORMROT     24000 //  12800, n. Number of steps per worm rotation (PEC Eq mode only:)                <-Req'd
                                           //         n = (AXIS1_STEPS_PER_DEGREE*360)/reduction_final_stage
 
-#define AXIS1_DRIVER_MODEL            OFF //    OFF, (See above.) Stepper driver model.                                      <-Often
-#define AXIS1_DRIVER_MICROSTEPS       OFF //    OFF, n. Microstep mode when tracking.                                        <-Often
+#define AXIS1_DRIVER_MODEL          A4988 //    OFF, (See above.) Stepper driver model.                                      <-Often
+#define AXIS1_DRIVER_MICROSTEPS        16 //    OFF, n. Microstep mode when tracking.                                        <-Often
 #define AXIS1_DRIVER_MICROSTEPS_GOTO  OFF //    OFF, n. Microstep mode used during gotos.                                     Option
 #define AXIS1_DRIVER_IHOLD            OFF //    OFF, n, (mA.) Current during standstill. OFF uses IRUN/2.0                    Option
 #define AXIS1_DRIVER_IRUN             OFF //    OFF, n, (mA.) Current during tracking, appropriate for stepper/driver/etc.    Option
@@ -130,11 +133,11 @@
 
 // AXIS2 DEC/ALT
 // see https://onstep.groups.io/g/main/wiki/6-Configuration#AXIS2
-#define AXIS2_STEPS_PER_DEGREE    12800.0 //  12800, n. Number of steps per degree:                                          <-Req'd
+#define AXIS2_STEPS_PER_DEGREE       9600 //  12800, n. Number of steps per degree:                                          <-Req'd
                                           //         n = (stepper_steps * micro_steps * overall_gear_reduction)/360.0
 
-#define AXIS2_DRIVER_MODEL            OFF //    OFF, (See above.) Stepper driver model.                                      <-Often
-#define AXIS2_DRIVER_MICROSTEPS       OFF //    OFF, n. Microstep mode when tracking.                                        <-Often
+#define AXIS2_DRIVER_MODEL          A4988 //    OFF, (See above.) Stepper driver model.                                      <-Often
+#define AXIS2_DRIVER_MICROSTEPS        16 //    OFF, n. Microstep mode when tracking.                                        <-Often
 #define AXIS2_DRIVER_MICROSTEPS_GOTO  OFF //    OFF, n. Microstep mode used during gotos.                                     Option
 #define AXIS2_DRIVER_IHOLD            OFF //    OFF, n, (mA.) Current during standstill. OFF uses IRUN/2.0                    Option
 #define AXIS2_DRIVER_IRUN             OFF //    OFF, n, (mA.) Current during tracking, appropriate for stepper/driver/etc.    Option
@@ -166,7 +169,7 @@
 
 // AXIS4 FOCUSER 1
 // see https://onstep.groups.io/g/main/wiki/6-Configuration#AXIS4
-#define FOCUSER1                      OFF //    OFF, ON to enable this focuser.                                               Option
+#define FOCUSER1                       ON //    OFF, ON to enable this focuser.                                               Option
 #define AXIS4_STEPS_PER_MICRON        0.5 //    0.5, n. Steps per micrometer. Figure this out by testing or other means.      Adjust
 #define AXIS4_STEP_RATE_MAX           8.0 //    8.0, n, (millisec.) Min. ms/step depends on processor. In DC mode, PWM freq.  Adjust
 
