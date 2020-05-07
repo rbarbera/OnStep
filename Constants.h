@@ -85,14 +85,15 @@
 
 // various Dallas/Maxim devices supported
 #define DS_MASK    0x3F00000000000000
-#define DS1820     0x2800000000000000 // DS18B20 temperature sensors etc. for focusing and dew heaters
+#define DS1820     0x2800000000000000 // DS1820 "generic" temperature sensors (DS18B20 or DS18S20) for focusing and dew heaters
+#define DS18S20    0x1000000000000000 // DS18S20 temperature sensors for focusing and dew heaters
 #define DS2413     0x3A00000000000000 // DS2413 GPIO pins for dew heaters
 #define CHAIN      0x3A00000000000001
 
 // various auxillary features
 #define AUXILLARY_FIRST             1
 #define SWITCH                      1
-#define ANALOG                      2
+#define ANALOG_OUTPUT               2
 #define DEW_HEATER                  3
 #define INTERVALOMETER              4
 #define AUXILLARY_LAST              4
