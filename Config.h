@@ -10,8 +10,6 @@
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-#define TELESCOPE_COORDINATES OBSERVED_PLACE
-
 // ADJUST THE FOLLOWING TO CONFIGURE YOUR CONTROLLER FEATURES ----------------------------------------------------------------------
 // <-Req'd = always must set, <-Often = usually must set, Option = optional, Adjust = adjust as req'd, Infreq = infrequently changed
 
