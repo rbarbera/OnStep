@@ -3,11 +3,16 @@
 // We define a more generic symbol, in case more STM32 boards based on different lines are supported
 #define __ARM_STM32__
 
+// This is to avoid lots of warnings
+#undef boolean
+#define boolean bool
+
+#define HAL_FAST_PROCESSOR
 // Lower limit (fastest) step rate in uS for this platform (in SQW mode)
-#define HAL_MAXRATE_LOWER_LIMIT 20
+#define HAL_MAXRATE_LOWER_LIMIT 14
 
 // Width of step pulse
-#define HAL_PULSE_WIDTH 1200
+#define HAL_PULSE_WIDTH         500
 
 #include <HardwareTimer.h>
 
@@ -18,32 +23,21 @@
 #define cli() noInterrupts()
 #define sei() interrupts()
 
-//   The hardware USART serial ports and pins for STM32F103 are:
-//     USART1: TX PA9,  RX PA10 (connected to the CP2102)
-//     USART2: TX PA2,  RX PA3 (unused, the pins are used for Axis 2)
-//     USART3: TX PB10, RX PB11 (connected to the WeMOS D1 Mini WiFi)
-//
-// The only supported upload method for flashing OnStep to the Blue Pill is the Serial method, via the CP2102.
-// No other upload method is supported!
-// Verified to work with Arduino_STM32 repository snapshot as of Dec 26, 2019 or later.
-// Should work with earlier versions too.
-#define SerialA Serial1
-#define SerialB Serial3
+#define SerialA Serial
+#define SerialB Serial1
+#define SerialC Serial3
 
 // SerialA is always enabled, SerialB and SerialC are optional
 #define HAL_SERIAL_B_ENABLED
+#define HAL_SERIAL_C_ENABLED
 
 // New symbol for the default I2C port -------------------------------------------------------------
 #define HAL_Wire Wire
 
 // Non-volatile storage ------------------------------------------------------------------------------
-#if defined(NV_AT24C32)
-  #include "../drivers/NV_I2C_EEPROM_AT24C32_C.h"
-#elif defined(NV_MB85RC256V)
-  #include "../drivers/NV_I2C_FRAM_MB85RC256V.h"
-#else
-  #include "../drivers/NV_I2C_EEPROM_AT24C32_C.h"
-#endif
+// The FYSETC S6 has a 2047 byte EEPROM built-in
+#undef E2END
+#include "../drivers/NV_I2C_EEPROM_24LC16_C.h"
 
 //--------------------------------------------------------------------------------------------------
 // Nanoseconds delay function
@@ -55,14 +49,11 @@ void delayNanoseconds(unsigned int n) {
 
 //--------------------------------------------------------------------------------------------------
 // General purpose initialize for HAL
-void HAL_Init(void) {
+void HAL_Initialize(void) {
   // calibrate delayNanoseconds()
   uint32_t startTime,npp;
   cli(); startTime=micros(); delayNanoseconds(65535); npp=micros(); sei(); npp=((int32_t)(npp-startTime)*1000)/63335;
   if (npp<1) npp=1; if (npp>2000) npp=2000; _nanosPerPass=npp;
-
-  // Make sure that debug pins are not reserved, and therefore usable as GPIO
-  disableDebugPorts();
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -73,116 +64,114 @@ float HAL_MCU_Temperature(void) {
 
 //--------------------------------------------------------------------------------------------------
 // Initialize timers
-
-#if (F_CPU!=48000000) && (F_CPU!=72000000)
-  #error "OnStep STM32 HAL timer design might not be appropraite for this clock rate, choose 72MHz or 48MHz."
-#endif
-
-// This code is based on the following document
-//
-// http://docs.leaflabs.com/static.leaflabs.com/pub/leaflabs/maple-docs/0.0.10/lang/api/hardwaretimer.html#lang-hardwaretimer
-// And this document:
-//
-// http://docs.leaflabs.com/static.leaflabs.com/pub/leaflabs/maple-docs/0.0.12/timers.html
-// Pause the timer while we're configuring it
+// frequency compensation for adjusting microseconds to timer counts
+//#define F_COMP 19.7721042
+#define F_COMP 4000000
 
 #define ISR(f) void f (void)
 
-// Sidereal timer is on STM32 Hardware Timer 1
-HardwareTimer Timer_Sidereal(1);
+HardwareTimer *Timer_Sidereal = new HardwareTimer(TIM1);
+HardwareTimer *Timer_Axis1    = new HardwareTimer(TIM10);
+HardwareTimer *Timer_Axis2    = new HardwareTimer(TIM11);
+
+#define SIDEREAL_CH  1
+#define AXIS1_CH     1
+#define AXIS2_CH     1
+
+// Sidereal timer
 void TIMER1_COMPA_vect(void);
 
-// Axis1 motor timer is on STM32 Hardware Timer 3
-HardwareTimer Timer_Axis1(3);
+// Axis1 motor timer
 void TIMER3_COMPA_vect(void);
 
-// Axis2 motor timer is on STM32 Hardware Timer 2
-// Even though the called function is TIMER4_COMPA_vect(). The reason is that Timer 4
-// on the STM32 is used for I2C, which is required for the EEPROM on the RTC module
-HardwareTimer Timer_Axis2(2);
+// Axis2 motor timer
 void TIMER4_COMPA_vect(void);
 
 // Init sidereal clock timer
 void HAL_Init_Timer_Sidereal() {
-  Timer_Sidereal.pause();
+  uint32_t psf;
 
-  Timer_Sidereal.setMode(TIMER_CH1, TIMER_OUTPUT_COMPARE);
-  Timer_Sidereal.setCompare(TIMER_CH1, 1); // Interrupt 1 count after each update
-  Timer_Sidereal.attachInterrupt(TIMER_CH1, TIMER1_COMPA_vect);
+  Timer_Sidereal->pause();
+  Timer_Sidereal->setMode(SIDEREAL_CH, TIMER_OUTPUT_COMPARE);
+  Timer_Sidereal->setCaptureCompare(SIDEREAL_CH, 1); // Interrupt 1 count after each update
+  Timer_Sidereal->attachInterrupt(SIDEREAL_CH, TIMER1_COMPA_vect);
 
   // Set up period
   // 0.166... us per count (72/12 = 6MHz) 10.922 ms max, more than enough for the 1/100 second sidereal clock +/- any PPS adjustment for xo error
-  unsigned long psf = F_CPU/6000000; // for example, 72000000/6000000 = 12
-  Timer_Sidereal.setPrescaleFactor(psf);
-  Timer_Sidereal.setOverflow(round((60000.0/1.00273790935)/3.0));
+  psf = Timer_Sidereal->getTimerClkFreq()/6000000; // for example, 72000000/6000000 = 12
+  Timer_Sidereal->setPrescaleFactor(psf);
+  Timer_Sidereal->setOverflow(round((60000.0/1.00273790935)/3.0));
 
-  // Refresh the timer's count, prescale, and overflow
-  Timer_Sidereal.refresh();
+  // set the 1/100 second sidereal clock timer to run at the second highest priority
+  Timer_Sidereal->setInterruptPriority(2, 2);
 
   // Start the timer counting
-  Timer_Sidereal.resume();
+  Timer_Sidereal->resume();
+
+  // Refresh the timer's count, prescale, and overflow
+  Timer_Sidereal->refresh();
 }
 
 // Init Axis1 and Axis2 motor timers and set their priorities
 void HAL_Init_Timers_Motor() {
+  uint32_t psf;
   // ===== Axis 1 Timer =====
   // Pause the timer while we're configuring it
-  Timer_Axis1.pause();
+  Timer_Axis1->pause();
 
   // Set up an interrupt on channel 3
-  Timer_Axis1.setMode(TIMER_CH3, TIMER_OUTPUT_COMPARE);
-  Timer_Axis1.setCompare(TIMER_CH3, 1);  // Interrupt 1 count after each update
-  Timer_Axis1.attachInterrupt(TIMER_CH3, TIMER3_COMPA_vect);
+  Timer_Axis1->setMode(AXIS1_CH, TIMER_OUTPUT_COMPARE);
+  Timer_Axis1->setCaptureCompare(AXIS1_CH, 1);  // Interrupt 1 count after each update
+  Timer_Axis1->attachInterrupt(AXIS1_CH, TIMER3_COMPA_vect);
 
   // Set up period
   // 0.25... us per count (72/18 = 4MHz) 16.384 ms max, good resolution for accurate motor timing and still a reasonable range (for lower steps per degree)
-  unsigned long psf = F_CPU/4000000;     // for example, 72000000/4000000 = 18
-  Timer_Axis1.setPrescaleFactor(psf);
-  Timer_Axis1.setOverflow(65535);        // allow enough time that the sidereal clock will tick
+  psf = Timer_Axis1->getTimerClkFreq()/F_COMP; // for example, 72000000/4000000 = 18
+  Timer_Axis1->setPrescaleFactor(psf);
+  Timer_Axis1->setOverflow(65535); // allow enough time that the sidereal clock will tick
 
-  // Refresh the timer's count, prescale, and overflow
-  Timer_Axis1.refresh();
+  // set the motor timer to run at the highest priority
+  Timer_Axis1->setInterruptPriority(1, 0);
 
   // Start the timer counting
-  Timer_Axis1.resume();
+  Timer_Axis1->resume();
   
+  // Refresh the timer's count, prescale, and overflow
+  Timer_Axis1->refresh();
+
   // ===== Axis 2 Timer =====
   // Pause the timer while we're configuring it
-  Timer_Axis2.pause();
+  Timer_Axis2->pause();
 
   // Set up an interrupt on channel 2
-  Timer_Axis2.setMode(TIMER_CH2, TIMER_OUTPUT_COMPARE);
-  Timer_Axis2.setCompare(TIMER_CH2, 1);  // Interrupt 1 count after each update
-  Timer_Axis2.attachInterrupt(TIMER_CH2, TIMER4_COMPA_vect);
+  Timer_Axis2->setMode(AXIS2_CH, TIMER_OUTPUT_COMPARE);
+  Timer_Axis2->setCaptureCompare(AXIS2_CH, 1);  // Interrupt 1 count after each update
+  Timer_Axis2->attachInterrupt(AXIS2_CH, TIMER4_COMPA_vect);
 
   // Set up period
-  Timer_Axis2.setPrescaleFactor(psf);
-  Timer_Axis2.setOverflow(65535);         // allow enough time that the sidereal clock will tick
+  psf = Timer_Axis2->getTimerClkFreq()/F_COMP; // for example, 72000000/4000000 = 18
+  Timer_Axis2->setPrescaleFactor(psf);
+  Timer_Axis2->setOverflow(65535); // allow enough time that the sidereal clock will tick
 
-  // Refresh the timer's count, prescale, and overflow
-  Timer_Axis2.refresh();
+  // set the motor timer to run at the highest priority
+  Timer_Axis2->setInterruptPriority(1, 1);
 
   // Start the timer counting
-  Timer_Axis2.resume();
+  Timer_Axis2->resume();
 
-  // ===== Set timer priorities =====
-  // set the 1/100 second sidereal clock timer to run at the second highest priority
-  nvic_irq_set_priority(NVIC_TIMER1_CC, 2);
-
-  // set the motor timers to run at the highest priority
-  nvic_irq_set_priority(NVIC_TIMER2, 0);
-  nvic_irq_set_priority(NVIC_TIMER3, 0);
+  // Refresh the timer's count, prescale, and overflow
+  Timer_Axis2->refresh();
 }
 
-// Set timer1 to interval in 1/16 microsecond units, for the 1/100 second sidereal timer
+// Set timer1 to interval (in 0.0625 microsecond units), for the 1/100 second sidereal timer
 void Timer1SetInterval(long iv, double rateRatio) {
-  Timer_Sidereal.setOverflow(round((((double)iv/16.0)*6.0)/rateRatio)); // our "clock" ticks at 6MHz due to the pre-scaler setting
+  Timer_Sidereal->setOverflow(round((((double)iv/16.0)*6.0)/rateRatio)); // our "clock" ticks at 6MHz due to the pre-scaler setting
 }
 
 //--------------------------------------------------------------------------------------------------
 // Re-program interval for the motor timers
 
-#define TIMER_RATE_MHZ 4L           // STM32 motor timers run at 4 MHz
+#define TIMER_RATE_MHZ         4L   // STM32 motor timers run at 4 MHz
 #define TIMER_RATE_16MHZ_TICKS 4L   // 16L/TIMER_RATE_MHZ, 4x slower than the default 16MHz
 
 // prepare to set Axis1/2 hw timers to interval (in 1/16 microsecond units)
@@ -202,12 +191,12 @@ void PresetTimerInterval(long iv, bool TPS, volatile uint32_t *nextRate, volatil
   cli(); *nextRate=i; *nextRep=reps; sei();
 }
 
-// Must work from within the motor ISR timers, in tick (TIMER_RATE_MHZ) units
+// Must work from within the motor ISR timers, in microseconds*(F_COMP/1000000.0) units
 void QuickSetIntervalAxis1(uint32_t r) {
-  Timer_Axis1.setOverflow(r);
+  Timer_Axis1->setOverflow(r);
 }
 void QuickSetIntervalAxis2(uint32_t r) {
-  Timer_Axis2.setOverflow(r);
+  Timer_Axis2->setOverflow(r);
 }
 
 // --------------------------------------------------------------------------------------------------
