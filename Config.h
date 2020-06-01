@@ -168,7 +168,7 @@
 
 // AXIS4 FOCUSER 1
 // see https://onstep.groups.io/g/main/wiki/6-Configuration#AXIS4
-#define FOCUSER1                       ON //    OFF, ON to enable this focuser.                                               Option
+#define FOCUSER1                      OFF //    OFF, ON to enable this focuser.                                               Option
 #define AXIS4_STEPS_PER_MICRON        0.5 //    0.5, n. Steps per micrometer. Figure this out by testing or other means.      Adjust
 #define AXIS4_SLEW_RATE_DESIRED       500 //    500, n, Where n=200..5000 (um/s.) Max microns/second. In DC mode, max pwr %   Adjust
 
@@ -186,7 +186,7 @@
 
 // AXIS5 FOCUSER 2
 // see https://onstep.groups.io/g/main/wiki/6-Configuration#AXIS5
-#define FOCUSER2                      OFF //    OFF, ON to enable this focuser.                                               Option
+#define FOCUSER2                       ON //    OFF, ON to enable this focuser.                                               Option
 #define AXIS5_STEPS_PER_MICRON        0.5 //    0.5, n. Steps per micrometer. Figure this out by testing or other means.      Adjust
 #define AXIS5_SLEW_RATE_DESIRED       500 //    500, n, Where n=200..5000 (um/s.) Max microns/second. In DC mode, max pwr %   Adjust
 
