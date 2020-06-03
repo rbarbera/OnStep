@@ -232,6 +232,8 @@ IRAM_ATTR ISR(TIMER3_COMPA_vect)
 
   if (slowAxis1Rep > 1) { slowAxis1Cnt++; if (slowAxis1Cnt%slowAxis1Rep != 0) goto done; }
 
+  if (haltAxis1) goto done;
+
 #if STEP_WAVE_FORM != DEDGE
   a1CLEAR;
 #endif
@@ -315,6 +317,8 @@ IRAM_ATTR ISR(TIMER4_COMPA_vect)
 #endif
 
   if (slowAxis2Rep > 1) { slowAxis2Cnt++; if (slowAxis2Cnt%slowAxis2Rep != 0) goto done; }
+
+  if (haltAxis2) goto done;
 
 #if STEP_WAVE_FORM != DEDGE
   a2CLEAR;

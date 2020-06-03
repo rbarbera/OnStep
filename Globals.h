@@ -66,10 +66,12 @@ double slewSpeed                        = 0;
 volatile long timerRateAxis1            = 0;
 volatile long timerRateBacklashAxis1    = 0;
 volatile boolean inbacklashAxis1        = false;
+boolean haltAxis1                       = false;
 boolean faultAxis1                      = false;
 volatile long timerRateAxis2            = 0;
 volatile long timerRateBacklashAxis2    = 0;
 volatile boolean inbacklashAxis2        = false;
+boolean haltAxis2                       = false;
 boolean faultAxis2                      = false;
 
 #if AXIS1_DRIVER_MODEL == TMC_SPI
@@ -198,6 +200,7 @@ volatile byte defaultDirAxis2           = defaultDirAxis2EInit;
 volatile byte defaultDirAxis1           = defaultDirAxis1NCPInit;
 
 // Status --------------------------------------------------------------------------------------------------------------------------
+// Note: the following error codes are obsolete ERR_SYNC, ERR_PARK
 enum GeneralErrors {
   ERR_NONE, ERR_MOTOR_FAULT, ERR_ALT_MIN, ERR_LIMIT_SENSE, ERR_DEC, ERR_AZM,
   ERR_UNDER_POLE, ERR_MERIDIAN, ERR_SYNC, ERR_PARK, ERR_GOTO_SYNC, ERR_UNSPECIFIED,
