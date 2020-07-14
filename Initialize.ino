@@ -108,8 +108,11 @@ void initStartupValues() {
   waitingHomeContinue = false;
 
   // PEC sanity check
-  if (pecBufferSize < 0 || pecBufferSize > 3384) pecBufferSize=0;
-  if (SecondsPerWormRotationAxis1>pecBufferSize) SecondsPerWormRotationAxis1=pecBufferSize;
+  if (pecBufferSize != 0) {
+    if (pecBufferSize < 61 || pecBufferSize > 3384) { pecBufferSize=0; DL("PEC: warning invalid pecBufferSize, PEC disabled"); }
+    if (200+pecBufferSize > E2END-200) { pecBufferSize=0; DL("PEC: warning buffer exceeds available NV, PEC disabled"); }
+  }
+  if (SecondsPerWormRotationAxis1 > pecBufferSize) SecondsPerWormRotationAxis1=pecBufferSize;
 
   // reset tracking and rates
   cli();
@@ -379,15 +382,12 @@ void initReadNvValues() {
   // check for flag that maxRate is stored in EE_maxRateL, if not move it there
   if (maxRate == -16) maxRate=nv.readLong(EE_maxRateL); else { nv.writeInt(EE_maxRate,-1); nv.writeLong(EE_maxRateL,maxRate); }
   // constrain values to the limits (1/2 to 2X the MaxRateBaseActual) and platform limits
-  if (maxRate < (long)(MaxRateBaseActual*8.0)) { maxRate=(long)(MaxRateBaseActual*8.0); DL("NV: maxRate warning (too low)"); }
-  if (maxRate > (long)(MaxRateBaseActual*32.0)) { maxRate=(long)(MaxRateBaseActual*32.0); DL("NV: maxRate warning (too high)"); }
+  if (maxRate < (long)(MaxRateBaseActual*8.0))  { maxRate=MaxRateBaseActual*8.0; DL("NV: maxRate warning (too low)"); }
+  if (maxRate > (long)(MaxRateBaseActual*32.0)) { maxRate=MaxRateBaseActual*32.0; DL("NV: maxRate warning (too high)"); }
   if (maxRate < maxRateLowerLimit()) maxRate=maxRateLowerLimit();
   
 #if SLEW_RATE_MEMORY == OFF
-  if (maxRate != (long)((double)MaxRateBaseActual*16.0)) {
-    maxRate=(double)MaxRateBaseActual*16.0; 
-    nv.writeLong(EE_maxRateL,maxRate);
-  }
+  if (maxRate != (long)(MaxRateBaseActual*16.0)) { maxRate=MaxRateBaseActual*16.0; nv.writeLong(EE_maxRateL,maxRate); }
 #endif
   setAccelerationRates(maxRate); // set the new acceleration rate
 
