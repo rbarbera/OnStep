@@ -1,8 +1,6 @@
 // -----------------------------------------------------------------------------------
 // Functions for initializing pins, variables, and timers on startup
 
-#define DEBUG_AXIS_MODES_OFF
-
 void initGeneralError() {
   switch (generalError) {
     case ERR_ALT_MIN:
@@ -25,29 +23,6 @@ void initPre() {
 }
 
 void initStartupValues() {
-  // Basic stepper driver mode setup
-  // if we made through validation and AXIS1_DRIVER_MODEL exists; AXIS2_DRIVER_MODEL, AXIS1_DRIVER_MICROSTEPS,
-  // and AXIS2_DRIVER_MICROSTEPS also exist and passed validation in the pre-processor
-#if AXIS1_DRIVER_MODEL != OFF
-  // translate microsteps to microstep bit code
-  AXIS1_DRIVER_CODE = translateMicrosteps(1, AXIS1_DRIVER_MODEL, AXIS1_DRIVER_MICROSTEPS);
-  AXIS2_DRIVER_CODE = translateMicrosteps(2, AXIS2_DRIVER_MODEL, AXIS2_DRIVER_MICROSTEPS);
-  #if AXIS1_DRIVER_MICROSTEPS_GOTO != OFF
-    AXIS1_DRIVER_CODE_GOTO = translateMicrosteps(1, AXIS1_DRIVER_MODEL, AXIS1_DRIVER_MICROSTEPS_GOTO);
-  #endif
-  #if AXIS2_DRIVER_MICROSTEPS_GOTO != OFF
-    AXIS2_DRIVER_CODE_GOTO = translateMicrosteps(2, AXIS2_DRIVER_MODEL, AXIS2_DRIVER_MICROSTEPS_GOTO);
-  #endif
-#endif
-#if AXIS3_DRIVER_MODEL != OFF
-  AXIS3_DRIVER_CODE = translateMicrosteps(3, AXIS3_DRIVER_MODEL, AXIS3_DRIVER_MICROSTEPS);
-#endif
-#if AXIS4_DRIVER_MODEL != OFF
-  AXIS4_DRIVER_CODE = translateMicrosteps(4, AXIS4_DRIVER_MODEL, AXIS4_DRIVER_MICROSTEPS);
-#endif
-#if AXIS5_DRIVER_MODEL != OFF
-  AXIS5_DRIVER_CODE = translateMicrosteps(5, AXIS5_DRIVER_MODEL, AXIS5_DRIVER_MICROSTEPS);
-#endif
 
   // initialize some fixed-point values
   amountGuideAxis1.fixed=0;
@@ -109,8 +84,8 @@ void initStartupValues() {
 
   // PEC sanity check
   if (pecBufferSize != 0) {
-    if (pecBufferSize < 61 || pecBufferSize > 3384) { pecBufferSize=0; DL("PEC: warning invalid pecBufferSize, PEC disabled"); }
-    if (200+pecBufferSize > E2END-200) { pecBufferSize=0; DL("PEC: warning buffer exceeds available NV, PEC disabled"); }
+    if (pecBufferSize < 61 || pecBufferSize > 3384) { pecBufferSize=0; DLF("PEC: warning invalid pecBufferSize, PEC disabled"); }
+    if (200+pecBufferSize > E2END-200) { pecBufferSize=0; DLF("PEC: warning buffer exceeds available NV, PEC disabled"); }
   }
   if (SecondsPerWormRotationAxis1 > pecBufferSize) SecondsPerWormRotationAxis1=pecBufferSize;
 
@@ -282,26 +257,57 @@ void initPins() {
     pinMode(Axis2_FAULT,INPUT);
   #endif
 #endif
-
-  StepperModeTrackingInit();
 }
 
 void initReadNvValues() {
+  if (E2END < 1023) { DLF("ERR, initReadNvValues(): bad NV size < 1024 bytes"); }
+
+  // get axis settings
+  nv.readBytes(EE_settingsAxis1,(byte*)&axis1Settings,sizeof(axis1Settings));
+  nv.readBytes(EE_settingsAxis2,(byte*)&axis2Settings,sizeof(axis2Settings));
+  nv.readBytes(EE_settingsAxis3,(byte*)&axis3Settings,sizeof(axis3Settings));
+  nv.readBytes(EE_settingsAxis4,(byte*)&axis4Settings,sizeof(axis4Settings));
+  nv.readBytes(EE_settingsAxis5,(byte*)&axis5Settings,sizeof(axis5Settings));
+
+  // Basic stepper driver mode setup
+  // if we made through validation and AXIS1_DRIVER_MODEL exists; AXIS2_DRIVER_MODEL, axis1Settings.microsteps,
+  // and axis2Settings.microsteps also exist and passed validation in the pre-processor
+#if AXIS1_DRIVER_MODEL != OFF
+  // translate microsteps to microstep bit code
+  AXIS1_DRIVER_CODE = translateMicrosteps(1, AXIS1_DRIVER_MODEL, axis1Settings.microsteps);
+  AXIS2_DRIVER_CODE = translateMicrosteps(2, AXIS2_DRIVER_MODEL, axis2Settings.microsteps);
+  #if AXIS1_DRIVER_MICROSTEPS_GOTO != OFF
+    AXIS1_DRIVER_CODE_GOTO = translateMicrosteps(1, AXIS1_DRIVER_MODEL, AXIS1_DRIVER_MICROSTEPS_GOTO);
+  #endif
+  #if AXIS2_DRIVER_MICROSTEPS_GOTO != OFF
+    AXIS2_DRIVER_CODE_GOTO = translateMicrosteps(2, AXIS2_DRIVER_MODEL, AXIS2_DRIVER_MICROSTEPS_GOTO);
+  #endif
+#endif
+#if AXIS3_DRIVER_MODEL != OFF
+  AXIS3_DRIVER_CODE = translateMicrosteps(3, AXIS3_DRIVER_MODEL, axis3Settings.microsteps);
+#endif
+#if AXIS4_DRIVER_MODEL != OFF
+  AXIS4_DRIVER_CODE = translateMicrosteps(4, AXIS4_DRIVER_MODEL, axis4Settings.microsteps);
+#endif
+#if AXIS5_DRIVER_MODEL != OFF
+  AXIS5_DRIVER_CODE = translateMicrosteps(5, AXIS5_DRIVER_MODEL, axis5Settings.microsteps);
+#endif
+
   // get the site information, if a GPS were attached we would use that here instead
   currentSite=nv.read(EE_currentSite);
-  if (currentSite > 3) { currentSite=0; DL("NV: bad currentSite"); } // valid site index?
+  if (currentSite > 3) { currentSite=0; DLF("ERR, initReadNvValues(): bad NV currentSite"); }
 
   double f=nv.readFloat(EE_sites+currentSite*25+0);
-  if (f < -90 || f > 90) { f=0.0; DL("NV: bad latitude"); } // valid latitude?
+  if (f < -90 || f > 90) { f=0.0; DLF("ERR, initReadNvValues(): bad NV latitude"); }
   setLatitude(f);
   longitude=nv.readFloat(EE_sites+currentSite*25+4);
-  if (longitude < -360 || longitude > 360) { longitude=0.0; DL("NV: bad longitude"); } // valid longitude?
+  if (longitude < -360 || longitude > 360) { longitude=0.0; DLF("ERR, initReadNvValues(): bad NV longitude"); }
   InitStartPosition();
 
   // get date and time from EEPROM, start keeping time
   timeZone=nv.read(EE_sites+currentSite*25+8)-128;
   timeZone=decodeTimeZone(timeZone);
-  if (timeZone < -12 || timeZone > 14) { timeZone=0.0; DL("NV: bad timeZone"); }  // valid time zone?
+  if (timeZone < -12 || timeZone > 14) { timeZone=0.0; DLF("ERR, initReadNvValues(): bad NV timeZone"); }
   nv.readString(EE_sites+currentSite*25+9,siteName);
 
   JD=nv.readFloat(EE_JD);
@@ -311,7 +317,7 @@ void initReadNvValues() {
     dateWasSet=true; timeWasSet=true;
   }
   if (JD < 2451544.5 || JD > 2816787.5) JD=2451544.5; // valid date?
-  if (LMT < 0 || LMT > 24) { LMT=0; DL("NV: bad LMT"); } // valid time?
+  if (LMT < 0 || LMT > 24) { LMT=0; DLF("ERR, initReadNvValues(): bad NV LMT"); }
 
   UT1=LMT+timeZone;
   updateLST(jd2last(JD,UT1,false));
@@ -321,35 +327,35 @@ void initReadNvValues() {
   int i=round(nv.read(EE_dpmE)-128);
   if (i > 60) i=((i-90)*2)+60; else if (i < -60) i=((i+90)*2)-60;
   degreesPastMeridianE=i;
-  if (degreesPastMeridianE < -180 || degreesPastMeridianE > 180) { degreesPastMeridianE=0.0; DL("NV: bad degreesPastMeridianE"); } // valid limit?
+  if (degreesPastMeridianE < -180 || degreesPastMeridianE > 180) { degreesPastMeridianE=0.0; DLF("ERR, initReadNvValues(): bad NV degreesPastMeridianE"); }
 
   i=round(nv.read(EE_dpmW)-128);
   if (i > 60) i=((i-60)*2)+60; else if (i < -60) i=((i+60)*2)-60;
   degreesPastMeridianW=i;
-  if (degreesPastMeridianW < -180 || degreesPastMeridianW > 180) { degreesPastMeridianW=0.0; DL("NV: bad degreesPastMeridianW"); } // valid limit?
+  if (degreesPastMeridianW < -180 || degreesPastMeridianW > 180) { degreesPastMeridianW=0.0; DLF("ERR, initReadNvValues(): bad NV degreesPastMeridianW"); }
 #endif
   
   // get the min. and max altitude
   minAlt=nv.read(EE_minAlt)-128;
-  if (minAlt < -30 || minAlt > 30) { minAlt=-10.0; DL("NV: bad minAlt"); } // valid limit?
+  if (minAlt < -30 || minAlt > 30) { minAlt=-10.0; DLF("ERR, initReadNvValues(): bad NV minAlt"); }
   maxAlt=nv.read(EE_maxAlt);
 #if MOUNT_TYPE == ALTAZM
   if (maxAlt > 87) maxAlt=87;
 #endif
-  if (maxAlt < 60 || maxAlt > 90) { maxAlt=80.0; DL("NV: bad maxAlt"); } // valid limit?
+  if (maxAlt < 60 || maxAlt > 90) { maxAlt=80.0; DLF("ERR, initReadNvValues(): bad NV maxAlt"); }
 
   // get the backlash amounts
   backlashAxis1=nv.readInt(EE_backlashAxis1);
-  if (backlashAxis1 < 0 ) { backlashAxis1=0; DL("NV: bad backlashAxis1"); } // valid backlash?
+  if (backlashAxis1 < 0 ) { backlashAxis1=0; DLF("ERR, initReadNvValues(): bad NV backlashAxis1"); }
   backlashAxis2=nv.readInt(EE_backlashAxis2);
-  if (backlashAxis2 < 0 ) { backlashAxis2=0; DL("NV: bad backlashAxis2"); } // valid backlash?
+  if (backlashAxis2 < 0 ) { backlashAxis2=0; DLF("ERR, initReadNvValues(): bad NV backlashAxis2"); }
   
 #if MOUNT_TYPE != ALTAZM
   // get the PEC status
   pecStatus  =nv.read(EE_pecStatus);
-  if (pecStatus < PEC_STATUS_FIRST || pecStatus > PEC_STATUS_LAST) { pecStatus=IgnorePEC; DL("NV: bad pecStatus"); } // valid PEC status?
+  if (pecStatus < PEC_STATUS_FIRST || pecStatus > PEC_STATUS_LAST) { pecStatus=IgnorePEC; DLF("ERR, initReadNvValues(): bad NV pecStatus"); }
   pecRecorded=nv.read(EE_pecRecorded);
-  if (pecRecorded != true && pecRecorded != false) { pecRecorded=false; DL("NV: bad pecRecorded"); } // valid PEC recorded?
+  if (pecRecorded != true && pecRecorded != false) { pecRecorded=false; DLF("ERR, initReadNvValues(): bad NV pecRecorded"); }
   if (!pecRecorded) pecStatus=IgnorePEC;
   for (int i=0; i < pecBufferSize; i++) pecBuffer[i]=nv.read(EE_pecTable+i);
   wormSensePos=nv.readLong(EE_wormSensePos); // validation of this value is not useful
@@ -361,16 +367,16 @@ void initReadNvValues() {
 
   // get the Park status
   parkSaved=nv.read(EE_parkSaved);
-  if (parkSaved != true && parkSaved != false) { parkSaved=false; DL("NV: bad parkSaved"); } // valid park saved?
+  if (parkSaved != true && parkSaved != false) { parkSaved=false; DLF("ERR, initReadNvValues(): bad NV parkSaved"); }
   parkStatus=nv.read(EE_parkStatus);
-  if (parkStatus < PARK_STATUS_FIRST || parkStatus > PARK_STATUS_LAST) { parkStatus=NotParked; DL("NV: bad parkStatus"); } // valid park status?
+  if (parkStatus < PARK_STATUS_FIRST || parkStatus > PARK_STATUS_LAST) { parkStatus=NotParked; DLF("ERR, initReadNvValues(): bad NV parkStatus"); }
   // tried to park but crashed?
   if (parkStatus == Parking) { parkStatus=ParkFailed; nv.write(EE_parkStatus,parkStatus); }
 
   // get the pulse-guide rate
   currentPulseGuideRate=nv.read(EE_pulseGuideRate);
-  if (currentPulseGuideRate < 0) { currentPulseGuideRate=0; DL("NV: bad currentPulseGuideRate"); } // valid pulse guide rate?
-  if (currentPulseGuideRate > GuideRate1x) { currentPulseGuideRate=GuideRate1x; DL("NV: bad currentPulseGuideRate"); }
+  if (currentPulseGuideRate < 0) { currentPulseGuideRate=0; DLF("ERR, initReadNvValues(): bad NV currentPulseGuideRate"); }
+  if (currentPulseGuideRate > GuideRate1x) { currentPulseGuideRate=GuideRate1x; DLF("ERR, initReadNvValues(): bad NV currentPulseGuideRate"); }
 
   // set the default MaxRate based on the desired goto speed
   MaxRateBaseActual=MaxRateBaseDesired;
@@ -382,8 +388,8 @@ void initReadNvValues() {
   // check for flag that maxRate is stored in EE_maxRateL, if not move it there
   if (maxRate == -16) maxRate=nv.readLong(EE_maxRateL); else { nv.writeInt(EE_maxRate,-1); nv.writeLong(EE_maxRateL,maxRate); }
   // constrain values to the limits (1/2 to 2X the MaxRateBaseActual) and platform limits
-  if (maxRate < (long)(MaxRateBaseActual*8.0))  { maxRate=MaxRateBaseActual*8.0; DL("NV: maxRate warning (too low)"); }
-  if (maxRate > (long)(MaxRateBaseActual*32.0)) { maxRate=MaxRateBaseActual*32.0; DL("NV: maxRate warning (too high)"); }
+  if (maxRate < (long)(MaxRateBaseActual*8.0))  { maxRate=MaxRateBaseActual*8.0; DLF("WRN, initReadNvValues(): NV maxRate (too low)"); }
+  if (maxRate > (long)(MaxRateBaseActual*32.0)) { maxRate=MaxRateBaseActual*32.0; DLF("WRN, initReadNvValues(): NV maxRate (too high)"); }
   if (maxRate < maxRateLowerLimit()) maxRate=maxRateLowerLimit();
   
 #if SLEW_RATE_MEMORY == OFF
@@ -394,13 +400,13 @@ void initReadNvValues() {
   // get autoMeridianFlip
 #if MOUNT_TYPE == GEM && MFLIP_AUTOMATIC_MEMORY == ON
   autoMeridianFlip=nv.read(EE_autoMeridianFlip);
-  if (autoMeridianFlip != 1 && autoMeridianFlip != 0) { autoMeridianFlip=0; DL("NV: bad autoMeridianFlip"); } // valid autoMeridianFlip saved?
+  if (autoMeridianFlip != 1 && autoMeridianFlip != 0) { autoMeridianFlip=0; DLF("ERR, initReadNvValues(): bad NV autoMeridianFlip"); }
 #endif
 
   // get meridian flip pause at home
 #if MOUNT_TYPE == GEM && MFLIP_PAUSE_HOME_MEMORY == ON
   pauseHome=nv.read(EE_pauseHome);
-  if (pauseHome != 1 && pauseHome != 0) { pauseHome=0; DL("NV: bad pauseHome"); } // valid pauseHome saved?
+  if (pauseHome != 1 && pauseHome != 0) { pauseHome=0; DLF("ERR, initReadNvValues(): bad NV pauseHome"); }
 #endif
 
   // set the default guide rate
@@ -428,6 +434,7 @@ void InitStartPosition() {
 void initWriteNvValues() {
   // EEPROM automatic initialization
   if (NV_INIT_KEY_RESET == ON) nv.writeLong(EE_autoInitKey,0);
+  
   if (nv.readLong(EE_autoInitKey) != NV_INIT_KEY) {
     for (int i=0; i<200; i++) { 
       #ifdef HAL_SERIAL_TRANSMIT
@@ -435,10 +442,13 @@ void initWriteNvValues() {
       #endif
       delay(10);
     }
+
+    // stepper driver setup is from Config.h
+    nv.write(EE_settingsRuntime,false);
     
     // init the whole nv memory
     for (int i=0; i<E2END; i++) nv.write(i,0);
-    
+   
     // init the site information, lat/long/tz/name
     nv.write(EE_currentSite,0);
     latitude=0; longitude=0;
@@ -516,6 +526,13 @@ void initWriteNvValues() {
 
     // finally, stop the init from happening again
     nv.writeLong(EE_autoInitKey,NV_INIT_KEY);
+  }
+  if (!nv.read(EE_settingsRuntime)) {
+    nv.writeBytes(EE_settingsAxis1,(byte*)&axis1Settings,sizeof(axis1Settings));
+    nv.writeBytes(EE_settingsAxis2,(byte*)&axis2Settings,sizeof(axis2Settings));
+    nv.writeBytes(EE_settingsAxis3,(byte*)&axis3Settings,sizeof(axis3Settings));
+    nv.writeBytes(EE_settingsAxis4,(byte*)&axis4Settings,sizeof(axis4Settings));
+    nv.writeBytes(EE_settingsAxis5,(byte*)&axis5Settings,sizeof(axis5Settings));
   }
 }
 

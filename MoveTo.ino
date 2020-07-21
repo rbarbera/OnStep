@@ -75,14 +75,14 @@ void moveTo() {
   // adjust rates near the horizon to help keep from exceeding the minAlt limit
   #if MOUNT_TYPE != ALTAZM
     if (latitudeAbs > 10) {
-      long posAxis2=latitudeSign*getInstrAxis2()*AXIS2_STEPS_PER_DEGREE;
+      long posAxis2=latitudeSign*getInstrAxis2()*axis2Settings.stepsPerDegree;
       static long lastPosAxis2=0;
       double distDestLimit=currentAlt-(minAlt+10.0); if (distDestLimit < SLEW_ACCELERATION_DIST/8.0) distDestLimit=SLEW_ACCELERATION_DIST/8.0;  
       // if Dec is decreasing slow down the Dec axis, if Dec is increasing slow down the RA axis
       if (posAxis2 < lastPosAxis2) {
-        if (distDestLimit*AXIS2_STEPS_PER_DEGREE < distDestAxis2) distDestAxis2=distDestLimit*AXIS2_STEPS_PER_DEGREE;
+        if (distDestLimit*axis2Settings.stepsPerDegree < distDestAxis2) distDestAxis2=distDestLimit*axis2Settings.stepsPerDegree;
       } else {
-        if (distDestLimit*AXIS1_STEPS_PER_DEGREE < distDestAxis1) distDestAxis1=distDestLimit*AXIS1_STEPS_PER_DEGREE;
+        if (distDestLimit*axis1Settings.stepsPerDegree < distDestAxis1) distDestAxis1=distDestLimit*axis1Settings.stepsPerDegree;
       }
       lastPosAxis2=posAxis2;
     }
@@ -272,17 +272,20 @@ void moveTo() {
 
           // at the polar home position
           homeMount=false;
-#if AXIS2_TANGENT_ARM != ON
-          atHome=true;
-#endif
+          if (AXIS2_TANGENT_ARM == OFF) atHome=true;
+          VLF("MSG: Homing done");
         } else {
           // restore trackingState
           trackingState=lastTrackingState; lastTrackingState=TrackingNone;
           SiderealClockSetInterval(siderealInterval);
           setDeltaTrackingRate();
+          VLF("MSG: Goto done");
           
           // allow 5 seconds for synchronization of coordinates after goto ends
-          if (trackingState == TrackingSidereal) trackingSyncSeconds=5;
+          if (trackingState == TrackingSidereal) {
+            trackingSyncSeconds=5;
+            VLF("MSG: Tracking sync started");
+          }
         }
       }
     }
@@ -317,7 +320,7 @@ long maxRateLowerLimit() {
   
   // on-the-fly mode switching used?
   #if MODE_SWITCH_BEFORE_SLEW == OFF
-    if ((AXIS1_DRIVER_STEP_GOTO != 1) || (AXIS2_DRIVER_STEP_GOTO != 1)) r_us=HAL_MAXRATE_LOWER_LIMIT*1.7;  // if this code is enabled, 27us
+    if (AXIS1_DRIVER_STEP_GOTO != 1 || AXIS2_DRIVER_STEP_GOTO != 1) r_us=r_us*1.7;  // if this code is enabled, 27us
   #endif
 
   // average required goto us rates for each axis with any micro-step mode switching applied, if tracking in 32X mode using 4X for gotos (32/4 = 8,) that's an 8x lower true rate so 27/8 = 3.4 is allowed
@@ -328,7 +331,7 @@ long maxRateLowerLimit() {
   r_us=(r_us_axis1+r_us_axis2/timerRateRatio)/2.0;  // if Axis1 is 10000 step/deg & Axis2 is 20000 steps/deg, Axis2 needs to run 2x speed so we must slow down.  3.4 on one axis and 6.8 on the other for an average of 5.1
 
   // the timer granulaity can start to make for some very abrupt rate changes below 0.25us
-  if (r_us < 0.25) r_us=0.25;
+  if (r_us < 0.25) { r_us=0.25; DLF("WRN, maxRateLowerLimit(): r_us exceeds design limit"); }
 
   // return rate in 1/16us units
   return round(r_us*16.0);

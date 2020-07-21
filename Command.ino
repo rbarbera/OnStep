@@ -185,12 +185,12 @@ void processCommands() {
           if (i >= 0 && i <= 3600) {
             if (parameter[0] == 'D') {
               reactivateBacklashComp();
-              cli(); backlashAxis2=(int)round(((double)i*(double)AXIS2_STEPS_PER_DEGREE)/3600.0); sei();
+              cli(); backlashAxis2=(int)round(((double)i*axis2Settings.stepsPerDegree)/3600.0); sei();
               nv.writeInt(EE_backlashAxis2,backlashAxis2);
             } else
             if (parameter[0] == 'R') {
               reactivateBacklashComp();
-              cli(); backlashAxis1 =(int)round(((double)i*(double)AXIS1_STEPS_PER_DEGREE)/3600.0); sei();
+              cli(); backlashAxis1 =(int)round(((double)i*axis1Settings.stepsPerDegree)/3600.0); sei();
               nv.writeInt(EE_backlashAxis1,backlashAxis1);
             } else commandError=CE_CMD_UNKNOWN;
           } else commandError=CE_PARAM_RANGE;
@@ -205,14 +205,14 @@ void processCommands() {
       if (command[0] == '%' && command[1] == 'B') {
         if (parameter[0] == 'D' && parameter[1] == 0) {
             reactivateBacklashComp();
-            i=(int)round(((double)backlashAxis2*3600.0)/(double)AXIS2_STEPS_PER_DEGREE);
+            i=(int)round(((double)backlashAxis2*3600.0)/axis2Settings.stepsPerDegree);
             if (i < 0) i=0; if (i > 3600) i=3600;
             sprintf(reply,"%d",i);
             booleanReply=false;
         } else
         if (parameter[0] == 'R' && parameter[1] == 0) {
             reactivateBacklashComp();
-            i=(int)round(((double)backlashAxis1*3600.0)/(double)AXIS1_STEPS_PER_DEGREE);
+            i=(int)round(((double)backlashAxis1*3600.0)/axis1Settings.stepsPerDegree);
             if (i < 0) i=0; if (i > 3600) i=3600;
             sprintf(reply,"%d",i);
             booleanReply=false;
@@ -695,8 +695,7 @@ void processCommands() {
 //            Returns: n.n# (OnStep returns more decimal places than LX200 standard)
       if (command[1] == 'T' && parameter[0] == 0)  {
         char temp[10];
-        // during slews, if tracking is enabled it's at the default sidereal rate
-        if (trackingState == TrackingMoveTo && lastTrackingState == TrackingSidereal) f=1.00273790935*60.0; else f=getTrackingRate60Hz();
+        f=getTrackingRate60Hz();
         dtostrf(f,0,5,temp);
         strcpy(reply,temp);
         booleanReply=false;
@@ -929,7 +928,7 @@ void processCommands() {
                 strcpy(reply,"N");
 #endif
                 booleanReply=false; break; // rotator availablity 2=rotate/derotate, 1=rotate, 0=off
-              case '9': dtostrf((double)maxRateLowerLimit()/16.0,3,3,reply); booleanReply=false; break;      // MaxRate (fastest/lowest)
+              case '9': dtostrf(maxRateLowerLimit()/16.0,3,3,reply); booleanReply=false; break;              // MaxRate (fastest/lowest)
               case 'A': dtostrf(ambient.getTemperature(),3,1,reply); booleanReply=false; break;              // temperature in deg. C
               case 'B': dtostrf(ambient.getPressure(),3,1,reply); booleanReply=false; break;                 // pressure in mb
               case 'C': dtostrf(ambient.getHumidity(),3,1,reply); booleanReply=false; break;                 // relative humidity in %
@@ -974,8 +973,8 @@ void processCommands() {
               case '1': dtostrf((double)MaxRateBaseActual,3,3,reply); booleanReply=false; break;
               case '2': dtostrf(SLEW_ACCELERATION_DIST,2,1,reply); booleanReply=false; break;
               case '3': sprintf(reply,"%ld",(long)round(TRACK_BACKLASH_RATE)); booleanReply=false; break;
-              case '4': sprintf(reply,"%ld",(long)round(AXIS1_STEPS_PER_DEGREE)); booleanReply=false; break;
-              case '5': sprintf(reply,"%ld",(long)round(AXIS2_STEPS_PER_DEGREE)); booleanReply=false; break;
+              case '4': sprintf(reply,"%ld",(long)round(axis1Settings.stepsPerDegree)); booleanReply=false; break;
+              case '5': sprintf(reply,"%ld",(long)round(axis2Settings.stepsPerDegree)); booleanReply=false; break;
               case '6': dtostrf(StepsPerSecondAxis1,3,6,reply); booleanReply=false; break;
               case '7': sprintf(reply,"%ld",(long)round(AXIS1_STEPS_PER_WORMROT)); booleanReply=false; break;
               case '8': sprintf(reply,"%ld",(long)round(pecBufferSize)); booleanReply=false; break;
@@ -983,15 +982,26 @@ void processCommands() {
               case '9': sprintf(reply,"%ld",(long)round(degreesPastMeridianE*4.0)); booleanReply=false; break;    // minutes past meridianE
               case 'A': sprintf(reply,"%ld",(long)round(degreesPastMeridianW*4.0)); booleanReply=false; break;    // minutes past meridianW
 #endif
-              case 'B': sprintf(reply,"%ld",(long)round(AXIS1_LIMIT_MAX/15.0)); booleanReply=false; break; // in hours
-              case 'C': sprintf(reply,"%ld",(long)round(AXIS2_LIMIT_MIN)); booleanReply=false; break;
-              case 'D': sprintf(reply,"%ld",(long)round(AXIS2_LIMIT_MAX)); booleanReply=false; break;
+              case 'e': sprintf(reply,"%ld",(long)round(axis1Settings.min)); booleanReply=false; break;           // RA east or -Az limit, in degrees
+              case 'w': sprintf(reply,"%ld",(long)round(axis1Settings.max)); booleanReply=false; break;           // RA west or +Az limit, in degrees
+              case 'B': sprintf(reply,"%ld",(long)round(axis1Settings.max/15.0)); booleanReply=false; break;      // RA west or +Az limit, in hours
+              case 'C': sprintf(reply,"%ld",(long)round(axis2Settings.min)); booleanReply=false; break;
+              case 'D': sprintf(reply,"%ld",(long)round(axis2Settings.max)); booleanReply=false; break;
               case 'E':
                 // coordinate mode for getting and setting RA/Dec
                 // 0 = OBSERVED_PLACE
                 // 1 = TOPOCENTRIC (does refraction)
                 // 2 = ASTROMETRIC_J2000
                 reply[0]='0'+(TELESCOPE_COORDINATES-1);
+                booleanReply=false;
+                supress_frame=true;
+              break;
+              case 'F':
+#if AXIS2_TANGENT_ARM == ON
+                reply[0]='1';
+#else
+                reply[0]='0';
+#endif
                 booleanReply=false;
                 supress_frame=true;
               break;
@@ -1014,15 +1024,15 @@ void processCommands() {
               case 'B': cli(); temp=(long)(trackingTimerRateAxis1*1000.0); sei(); sprintf(reply,"%ld",temp); booleanReply=false; break;       // DebugB, trackingTimerRateAxis1
               case 'C': sprintf(reply,"%ldus",average_loop_time); booleanReply=false; break;                                                  // DebugC, Workload average
               case 'E': double ra, de; cli(); getEqu(&ra,&de,false); sei(); sprintf(reply,"%f,%f",ra,de); booleanReply=false; break;          // DebugE, equatorial coordinates degrees (no division by 15)
-#if DEBUG != OFF                                                                                               // DebugF, EEPROM dump to DebugSer
+#if DEBUG != OFF // DebugF, EEPROM dump to DebugSer
               case 'F':
                 for (int x=0; x <= E2END+16; x++) {
                   if (x < 8 || x > E2END+8) {
-                    if (x%8 == 0) D("-----------");
-                    D("--");
+                    if (x%8 == 0) DF("-----------");
+                    DF("--");
                     if (x%8 == 7) DL();
                   } else {
-                    if (x%8 == 0) { D(":SXFF,"); char s[8]; sprintf(s,"%04d=",x/8); D(s); }
+                    if (x%8 == 0) { DF(":SXFF,"); char s[8]; sprintf(s,"%04d=",x/8); D(s); }
                     int v=nv.read(x-8);
                     if (v < 16) D(0); DebugSer.print(v,HEX);
                     if (x%8 == 7) DL("#");
@@ -1030,6 +1040,7 @@ void processCommands() {
                 }
               break;
 #endif
+              case 'G': dtostrf(getIndexAxis2(),3,6,reply); booleanReply=false; break;                                                        // DebugG, return index position
               default:  commandError=CE_CMD_UNKNOWN;
             }
           } else
@@ -1062,7 +1073,7 @@ void processCommands() {
         foc2.savePosition();
 #endif
         commandError=setHome(); booleanReply=false;
-        if (commandError == CE_MOUNT_IN_MOTION) stopSlewing();
+        if (commandError == CE_MOUNT_IN_MOTION) stopSlewing(SS_ALL_FAST);
       } else 
 // :hC#       Moves telescope to the home position
 //            Returns: Nothing
@@ -1074,7 +1085,7 @@ void processCommands() {
         foc2.savePosition();
 #endif
         commandError=goHome(true); booleanReply=false;
-        if (commandError == CE_MOUNT_IN_MOTION) stopSlewing();
+        if (commandError == CE_MOUNT_IN_MOTION) stopSlewing(SS_ALL_FAST);
       } else 
 // :hP#       Goto the Park Position
 //            Return: 0 on failure
@@ -1240,7 +1251,7 @@ void processCommands() {
 // :L?#       Get library free records (all catalogs)
 //            Returns: n#
       if (command[1] == '?' && parameter[0] == 0) { 
-          sprintf(reply,"%d",Lib.recFreeAll());
+          sprintf(reply,"%ld",Lib.recFreeAll());
           booleanReply=false;
       } else 
 
@@ -1428,7 +1439,7 @@ void processCommands() {
 //            Returns: Nothing
       if (command[0] == 'Q') {
         if (command[1] == 0) {
-          stopSlewing();
+          stopSlewing(SS_ALL_FAST);
           booleanReply=false; 
         } else
 // :Qe# Qw#   Halt east/westward Slews
@@ -1455,7 +1466,7 @@ void processCommands() {
         double maxStepsPerSecond=1000000.0/(maxRate/16.0);
         if (&parameter[0] != conv_end) {
           if (f < 0.001/60.0/60.0) f=0.001/60.0/60.0;
-          if (f > maxStepsPerSecond/AXIS1_STEPS_PER_DEGREE) f=maxStepsPerSecond/AXIS1_STEPS_PER_DEGREE;
+          if (f > maxStepsPerSecond/axis1Settings.stepsPerDegree) f=maxStepsPerSecond/axis1Settings.stepsPerDegree;
           customGuideRateAxis1(f*240.0,GUIDE_TIME_LIMIT*1000);
         }
         booleanReply=false; 
@@ -1467,7 +1478,7 @@ void processCommands() {
         double maxStepsPerSecond=1000000.0/(maxRate/16.0);
         if (&parameter[0] != conv_end) {
           if (f < 0.001/60.0/60.0) f=0.001/60.0/60.0;
-          if (f > maxStepsPerSecond/AXIS2_STEPS_PER_DEGREE) f=maxStepsPerSecond/AXIS2_STEPS_PER_DEGREE;
+          if (f > maxStepsPerSecond/axis2Settings.stepsPerDegree) f=maxStepsPerSecond/axis2Settings.stepsPerDegree;
           customGuideRateAxis2(f*240.0,GUIDE_TIME_LIMIT*1000);
         }
         booleanReply=false; 
@@ -1807,8 +1818,8 @@ void processCommands() {
             case '2': // set new slew rate (returns 1 success or 0 failure)
               if (!isSlewing()) {
                 maxRate=strtod(&parameter[3],&conv_end)*16.0;
-                if (maxRate < (double)MaxRateBaseActual*8.0) maxRate=(double)MaxRateBaseActual*8.0;
-                if (maxRate > (double)MaxRateBaseActual*32.0) maxRate=(double)MaxRateBaseActual*32.0;
+                if (maxRate < (long)(MaxRateBaseActual*8.0)) maxRate=MaxRateBaseActual*8.0;
+                if (maxRate > (long)(MaxRateBaseActual*32.0)) maxRate=MaxRateBaseActual*32.0;
                 if (maxRate < maxRateLowerLimit()) maxRate=maxRateLowerLimit();
                 nv.writeLong(EE_maxRateL,maxRate);
                 setAccelerationRates(maxRate);
@@ -2117,13 +2128,13 @@ void processCommands() {
         if (command[1] >= '0' && command[1] <= '3' && parameter[0] == 0) {
           currentSite=command[1]-'0'; nv.update(EE_currentSite,currentSite); booleanReply=false;
           double f=nv.readFloat(EE_sites+currentSite*25+0);
-          if (f < -90 || f > 90) { f=0.0; DL("NV: bad latitude"); } // valid latitude?
+          if (f < -90 || f > 90) { f=0.0; DLF("ERR, processCommands(): bad NV latitude"); }
           setLatitude(f);
           longitude=nv.readFloat(EE_sites+currentSite*25+4);
-          if (longitude < -360 || longitude > 360) { longitude=0.0; DL("NV: bad longitude"); } // valid longitude?
+          if (longitude < -360 || longitude > 360) { longitude=0.0; DLF("ERR, processCommands(): bad NV longitude"); }
           timeZone=nv.read(EE_sites+currentSite*25+8)-128;
-          if (timeZone < -12 || timeZone > 14) { timeZone=0.0; DL("NV: bad timeZone"); }  // valid time zone?
           timeZone=decodeTimeZone(timeZone);
+          if (timeZone < -12 || timeZone > 14) { timeZone=0.0; DLF("ERR, processCommands(): bad NV timeZone"); }
           updateLST(jd2last(JD,UT1,false));
         } else 
         if (command[1] == '?') {
@@ -2217,47 +2228,6 @@ void processCommands() {
    }
 }
 
-// stops all fast motion
-void stopSlewing() {
-  stopGuideAxis1();
-  stopGuideAxis2();
-  if (trackingState == TrackingMoveTo) if (!abortSlew) abortSlew=StartAbortSlew;
-}
-
-// stops everything if slewing or tracking breaks the limit, just stops Dec axis if guiding breaks the limit
-void decMinLimit() {
-  if (trackingState == TrackingMoveTo) { if (!abortSlew) abortSlew=StartAbortSlew; trackingState = TrackingNone; } else {
-    if (getInstrPierSide() == PierSideWest && guideDirAxis2 == 'n' ) guideDirAxis2='b'; else
-    if (getInstrPierSide() == PierSideEast && guideDirAxis2 == 's' ) guideDirAxis2='b'; else
-    if (guideDirAxis2 == 0 && generalError != ERR_DEC) trackingState = TrackingNone;
-  }
-}
-
-// stops everything if slewing or tracking breaks the limit, just stops Dec axis if guiding breaks the limit
-void decMaxLimit() {
-  if (trackingState == TrackingMoveTo) { if (!abortSlew) abortSlew=StartAbortSlew; trackingState = TrackingNone; } else {
-    if (getInstrPierSide() == PierSideWest && guideDirAxis2 == 's' ) guideDirAxis2='b'; else
-    if (getInstrPierSide() == PierSideEast && guideDirAxis2 == 'n' ) guideDirAxis2='b'; else
-    if (guideDirAxis2 == 0 && generalError != ERR_DEC) trackingState = TrackingNone;
-  }
-}
-
-// stops all motion except most guiding
-void stopLimit() {
-  if (trackingState == TrackingMoveTo) {
-    if (!abortSlew) abortSlew=StartAbortSlew;
-  } else {
-    trackingState=TrackingNone;
-    if (spiralGuide) stopGuideSpiral();
-  }
-}
-
-// stops all motion including guiding
-void hardLimit() {
-  stopSlewing();
-  if (trackingState != TrackingMoveTo) trackingState=TrackingNone;
-}
-
 // calculate the checksum and add to string
 void checksum(char s[]) {
   char HEXS[3]="";
@@ -2295,5 +2265,5 @@ bool cmdReply(char *s) {
 
 void logErrors(const char ch[], char cmd[], char param[], CommandErrors cmdErr) {
   if (cmdErr <= CE_0) return;
-  VL(ch); VL(" \""); VL(cmd); VL(param); VL("\", Error "); VLL(commandErrorStr[cmdErr]);
+  V(ch); V(" \""); V(cmd); V(param); V("\", Error "); VL(commandErrorStr[cmdErr]);
 }

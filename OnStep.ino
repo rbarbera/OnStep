@@ -40,8 +40,8 @@
 // firmware info, these are returned by the ":GV?#" commands
 #define FirmwareDate          __DATE__
 #define FirmwareVersionMajor  4
-#define FirmwareVersionMinor  10      // minor version 0 to 99
-#define FirmwareVersionPatch  "e"     // for example major.minor patch: 1.3c
+#define FirmwareVersionMinor  11      // minor version 0 to 99
+#define FirmwareVersionPatch  "a"     // for example major.minor patch: 1.3c
 #define FirmwareVersionConfig 3       // internal, for tracking configuration file changes
 #define FirmwareName          "On-Step"
 #define FirmwareTime          __TIME__
@@ -71,21 +71,25 @@
 // Helper macros for debugging, with less typing
 #if DEBUG != OFF
   #define D(x)       DebugSer.print(x)
-  #define DH(x)      DebugSer.print(x,HEX)
+  #define DF(x)      DebugSer.print(F(x))
   #define DL(x)      DebugSer.println(x)
-  #define DHL(x,y)   DebugSer.println(x,HEX)
+  #define DLF(x)     DebugSer.println(F(x))
 #else
   #define D(x)
-  #define DH(x,y)
+  #define DF(x)
   #define DL(x)
-  #define DHL(x,y)
+  #define DLF(x)
 #endif
 #if DEBUG == VERBOSE
-  #define VL(x)       DebugSer.print(x)
-  #define VLL(x)      DebugSer.println(x)
+  #define V(x)        DebugSer.print(x)
+  #define VF(x)       DebugSer.print(F(x))
+  #define VL(x)       DebugSer.println(x)
+  #define VLF(x)      DebugSer.println(F(x))
 #else
+  #define V(x)
+  #define VF(x)
   #define VL(x)
-  #define VLL(x)
+  #define VLF(x)
 #endif
 // ---------------------------------------------------------------------------------------------------
 
@@ -167,17 +171,15 @@ void setup() {
 
 #if DEBUG != OFF
   // Initialize USB serial debugging early, so we can use DebugSer.print() for debugging, if needed
-  DebugSer.begin(9600);
-  delay(5000);
+  DebugSer.begin(9600); delay(5000); DebugSer.flush(); VLF(""); VLF("");
 #endif
-
-  VL("MSG: OnStep "); VL(FirmwareVersionMajor); VL("."); VL(FirmwareVersionMinor); VLL(FirmwareVersionPatch);
+  VF("MSG: OnStep "); V(FirmwareVersionMajor); V("."); V(FirmwareVersionMinor); VL(FirmwareVersionPatch);
   
   // Call hardware specific initialization
-  VLL("MSG: Init HAL");
+  VLF("MSG: Init HAL");
   HAL_Init();
 
-  VLL("MSG: Init serial");
+  VLF("MSG: Init serial");
   SerialA.begin(SERIAL_A_BAUD_DEFAULT);
 #ifdef HAL_SERIAL_B_ENABLED
   #ifdef SERIAL_B_RX
@@ -202,8 +204,12 @@ void setup() {
   // Take another two seconds to be sure Serial ports are online
   delay(2000);
 
-  // initialize the Non-Volatile Memory
-  VLL("MSG: Init NV");
+  // set initial values for some variables
+  VLF("MSG: Init startup values");
+  initStartupValues();
+
+  // Check the Non-Volatile Memory
+  VLF("MSG: Init NV");
   if (!nv.init()) {
     while (true) {
       SerialA.print("NV (EEPROM) failure!#\r\n");
@@ -216,47 +222,45 @@ void setup() {
     }
   }
 
+  // if this is the first startup set EEPROM to defaults
+  initWriteNvValues();
+
+  // set pins for input/output as specified in Config.h and PinMap.h
+  VLF("MSG: Init pins");
+  initPins();
+
   // initialize the Object Library
-  VLL("MSG: Init library/catalogs");
+  VLF("MSG: Init library/catalogs");
   Lib.init();
 
   // prepare PEC buffer
 #if MOUNT_TYPE != ALTAZM
-  VLL("MSG: Init PEC");
+  VLF("MSG: Init PEC");
   createPecBuffer();
 #endif
 
-  // set initial values for some variables
-  initStartupValues();
-
-  // set pins for input/output as specified in Config.h and PinMap.h
-  initPins();
-
   // get guiding ready
-  VLL("MSG: Init guiding");
+  VLF("MSG: Init guiding");
   initGuide();
-
-  // if this is the first startup set EEPROM to defaults
-  initWriteNvValues();
-  
+ 
   // get weather monitoring ready to go
-  VLL("MSG: Init weather");
+  VLF("MSG: Init weather");
   if (!ambient.init()) generalError=ERR_WEATHER_INIT;
 
   // setup features
 #ifdef FEATURES_PRESENT
-  VLL("MSG: Init auxiliary features");
+  VLF("MSG: Init auxiliary features");
   featuresInit();
 #endif
 
   // get the TLS ready (if present)
-  VLL("MSG: Init TLS");
+  VLF("MSG: Init TLS");
   if (!tls.init()) generalError=ERR_SITE_INIT;
   
   // this sets up the sidereal timer and tracking rates
-  VLL("MSG: Init sidereal timer");
+  VLF("MSG: Init sidereal timer");
   siderealInterval=nv.readLong(EE_siderealInterval); // the number of 16MHz clocks in one sidereal second (this is scaled to actual processor speed)
-  if (siderealInterval < 14360682L || siderealInterval > 17551944L) { siderealInterval=15956313L; DL("NV: bad siderealInterval"); } // valid siderealInterval?
+  if (siderealInterval < 14360682L || siderealInterval > 17551944L) { siderealInterval=15956313L; DLF("ERR, setup(): bad NV siderealInterval"); }
   SiderealRate=siderealInterval/StepsPerSecondAxis1;
   timerRateAxis1=SiderealRate;
   timerRateAxis2=SiderealRate;
@@ -267,8 +271,12 @@ void setup() {
   timerRateBacklashAxis2=(SiderealRate/TRACK_BACKLASH_RATE)*timerRateRatio;
 
   // now read any saved values from EEPROM into varaibles to restore our last state
-  VLL("MSG: NV getting run-time settings");
+  VLF("MSG: NV getting run-time settings");
   initReadNvValues();
+
+  // setup the stepper driver modes
+  VLF("MSG: Init motor timers");
+  StepperModeTrackingInit();
 
   // starts the hardware timers that keep sidereal time, move the motors, etc.
   setTrackingRate(default_tracking_rate);
@@ -278,7 +286,7 @@ void setup() {
   // tracking autostart
 #if TRACK_AUTOSTART == ON
   #if MOUNT_TYPE != ALTAZM
-    VLL("MSG: Tracking autostart");
+    VLF("MSG: Tracking autostart");
 
     // tailor behaviour depending on TLS presence
     if (!tls.active) {
@@ -301,17 +309,15 @@ void setup() {
 
   // start rotator if present
 #if ROTATOR == ON
-  rot.init(Axis3_STEP,Axis3_DIR,Axis3_EN,AXIS3_STEP_RATE_MAX,AXIS3_STEPS_PER_DEGREE,AXIS3_LIMIT_MIN,AXIS3_LIMIT_MAX);
-  #if AXIS3_DRIVER_REVERSE == ON
-    rot.setReverseState(HIGH);
-  #endif
-  VLL("MSG: Init rotator");
+  VLF("MSG: Init rotator");
+  rot.init(Axis3_STEP,Axis3_DIR,Axis3_EN,AXIS3_STEP_RATE_MAX,axis3Settings.stepsPerDegree,axis3Settings.min,axis3Settings.max);
+  if (axis3Settings.reverse == ON) rot.setReverseState(HIGH);
   rot.setDisableState(AXIS3_DRIVER_DISABLE);
   
   #if AXIS3_DRIVER_MODEL == TMC_SPI
-    tmcAxis3.setup(AXIS3_DRIVER_INTPOL,AXIS3_DRIVER_DECAY_MODE,AXIS3_DRIVER_CODE,AXIS3_DRIVER_IRUN,AXIS3_DRIVER_IRUN);
+    tmcAxis3.setup(AXIS3_DRIVER_INTPOL,AXIS3_DRIVER_DECAY_MODE,AXIS3_DRIVER_CODE,axis3Settings.IRUN,axis3Settings.IRUN);
     delay(150);
-    tmcAxis3.setup(AXIS3_DRIVER_INTPOL,AXIS3_DRIVER_DECAY_MODE,AXIS3_DRIVER_CODE,AXIS3_DRIVER_IRUN,AXIS3_DRIVER_IHOLD);
+    tmcAxis3.setup(AXIS3_DRIVER_INTPOL,AXIS3_DRIVER_DECAY_MODE,AXIS3_DRIVER_CODE,axis3Settings.IRUN,AXIS3_DRIVER_IHOLD);
   #endif
   
   #if AXIS3_DRIVER_POWER_DOWN == ON
@@ -323,21 +329,16 @@ void setup() {
 
   // start focusers if present
 #if FOCUSER1 == ON
-  foc1.init(Axis4_STEP,Axis4_DIR,Axis4_EN,EE_posAxis4,EE_tcfCoefAxis4,EE_tcfEnAxis4,AXIS4_STEP_RATE_MAX,AXIS4_STEPS_PER_MICRON,AXIS4_LIMIT_MIN*1000.0,AXIS4_LIMIT_MAX*1000.0,AXIS4_LIMIT_MIN_RATE);
-  #if AXIS4_DRIVER_DC_MODE != OFF
-    foc1.initDcPower(EE_dcPwrAxis4);
-    foc1.setPhase1();
-  #endif
-  #if AXIS4_DRIVER_REVERSE == ON
-    foc1.setReverseState(HIGH);
-  #endif
-  VLL("MSG: Init focuser1");
+  VLF("MSG: Init focuser1");
+  foc1.init(Axis4_STEP,Axis4_DIR,Axis4_EN,EE_posAxis4,EE_tcfCoefAxis4,EE_tcfEnAxis4,AXIS4_STEP_RATE_MAX,axis4Settings.stepsPerMicron,axis4Settings.min*1000.0,axis4Settings.max*1000.0,AXIS4_LIMIT_MIN_RATE);
+  if (AXIS4_DRIVER_DC_MODE != OFF) { foc1.initDcPower(EE_dcPwrAxis4); foc1.setPhase1(); }
+  if (AXIS4_DRIVER_REVERSE == ON) foc1.setReverseState(HIGH);
   foc1.setDisableState(AXIS4_DRIVER_DISABLE);
 
   #if AXIS4_DRIVER_MODEL == TMC_SPI
-    tmcAxis4.setup(AXIS4_DRIVER_INTPOL,AXIS4_DRIVER_DECAY_MODE,AXIS4_DRIVER_CODE,AXIS4_DRIVER_IRUN,AXIS4_DRIVER_IRUN);
+    tmcAxis4.setup(AXIS4_DRIVER_INTPOL,AXIS4_DRIVER_DECAY_MODE,AXIS4_DRIVER_CODE,axis4Settings.IRUN,axis4Settings.IRUN);
     delay(150);
-    tmcAxis4.setup(AXIS4_DRIVER_INTPOL,AXIS4_DRIVER_DECAY_MODE,AXIS4_DRIVER_CODE,AXIS4_DRIVER_IRUN,AXIS4_DRIVER_IHOLD);
+    tmcAxis4.setup(AXIS4_DRIVER_INTPOL,AXIS4_DRIVER_DECAY_MODE,AXIS4_DRIVER_CODE,axis4Settings.IRUN,AXIS4_DRIVER_IHOLD);
   #endif
 
   #if AXIS4_DRIVER_POWER_DOWN == ON
@@ -348,21 +349,16 @@ void setup() {
 #endif
 
 #if FOCUSER2 == ON
-  foc2.init(Axis5_STEP,Axis5_DIR,Axis5_EN,EE_posAxis5,EE_tcfCoefAxis5,EE_tcfEnAxis5,AXIS5_STEP_RATE_MAX,AXIS5_STEPS_PER_MICRON,AXIS5_LIMIT_MIN*1000.0,AXIS5_LIMIT_MAX*1000.0,AXIS5_LIMIT_MIN_RATE);
-  #if AXIS5_DRIVER_DC_MODE == DRV8825
-    foc2.initDcPower(EE_dcPwrAxis5);
-    foc2.setPhase2();
-  #endif
-  #if AXIS5_DRIVER_REVERSE == ON
-    foc2.setReverseState(HIGH);
-  #endif
-  VLL("MSG: Init focuser2");
+  VLF("MSG: Init focuser2");
+  foc2.init(Axis5_STEP,Axis5_DIR,Axis5_EN,EE_posAxis5,EE_tcfCoefAxis5,EE_tcfEnAxis5,AXIS5_STEP_RATE_MAX,axis5Settings.stepsPerMicron,axis5Settings.min*1000.0,axis5Settings.max*1000.0,AXIS5_LIMIT_MIN_RATE);
+  if (AXIS5_DRIVER_DC_MODE == DRV8825) { foc2.initDcPower(EE_dcPwrAxis5); foc2.setPhase2(); }
+  if (axis5Settings.reverse == ON) foc2.setReverseState(HIGH);
   foc2.setDisableState(AXIS5_DRIVER_DISABLE);
 
   #if AXIS5_DRIVER_MODEL == TMC_SPI
-    tmcAxis5.setup(AXIS5_DRIVER_INTPOL,AXIS5_DRIVER_DECAY_MODE,AXIS5_DRIVER_CODE,AXIS5_DRIVER_IRUN,AXIS5_DRIVER_IRUN);
+    tmcAxis5.setup(AXIS5_DRIVER_INTPOL,AXIS5_DRIVER_DECAY_MODE,AXIS5_DRIVER_CODE,axis5Settings.IRUN,axis5Settings.IRUN);
     delay(150);
-    tmcAxis5.setup(AXIS5_DRIVER_INTPOL,AXIS5_DRIVER_DECAY_MODE,AXIS5_DRIVER_CODE,AXIS5_DRIVER_IRUN,AXIS5_DRIVER_IHOLD);
+    tmcAxis5.setup(AXIS5_DRIVER_INTPOL,AXIS5_DRIVER_DECAY_MODE,AXIS5_DRIVER_CODE,axis5Settings.IRUN,AXIS5_DRIVER_IHOLD);
   #endif
 
   #if AXIS5_DRIVER_POWER_DOWN == ON
@@ -373,7 +369,7 @@ void setup() {
 #endif
 
   // finally clear the comms channels
-  VLL("MSG: Serial buffer flush");
+  VLF("MSG: Serial buffer flush");
   delay(500);
   SerialA.flush();
   while (SerialA.available()) SerialA.read();
@@ -399,7 +395,7 @@ void setup() {
   cli(); siderealTimer=lst; guideSiderealTimer=lst; PecSiderealTimer=lst; sei();
   last_loop_micros=micros();
 
-  VLL("MSG: OnStep is ready"); VLL("");
+  VLF("MSG: OnStep is ready"); VL("");
 }
 
 void loop() {
@@ -504,21 +500,12 @@ void loop2() {
     if (lst%2 == 1) faultAxis2=tmcAxis2.error();
 #endif
 
-    if (faultAxis1 || faultAxis2) { 
-      generalError=ERR_MOTOR_FAULT;
-      if (trackingState == TrackingMoveTo) {
-        if (!abortSlew) abortSlew=StartAbortSlew;
-      } else {
-        trackingState=TrackingNone;
-        if (guideDirAxis1) guideDirAxis1='b';
-        if (guideDirAxis2) guideDirAxis2='b';
-      }
-    }
+    if (faultAxis1 || faultAxis2) { generalError=ERR_MOTOR_FAULT; stopSlewing(SS_LIMIT_HARD); }
 
     if (safetyLimitsOn) {
       // check altitude overhead limit and horizon limit
-      if (currentAlt < minAlt) { generalError=ERR_ALT_MIN; stopLimit(); }
-      if (currentAlt > maxAlt) { generalError=ERR_ALT_MAX; stopLimit(); }
+      if (currentAlt < minAlt) { generalError=ERR_ALT_MIN; if (MOUNT_TYPE == ALTAZM) stopSlewing(SS_LIMIT_AXIS2_MIN); else stopSlewing(SS_LIMIT); }
+      if (currentAlt > maxAlt) { generalError=ERR_ALT_MAX; if (MOUNT_TYPE == ALTAZM) stopSlewing(SS_LIMIT_AXIS2_MAX); else stopSlewing(SS_LIMIT); }
     }
 
     // OPTION TO POWER DOWN AXIS2 IF NOT MOVING
@@ -606,16 +593,16 @@ void loop2() {
 
 #if PPS_SENSE != OFF
     // update clock via PPS
-      cli();
-      PPSrateRatio=((double)1000000.0/(double)(PPSavgMicroS));
-      if ((long)(micros()-(PPSlastMicroS+2000000UL)) > 0) PPSsynced=false; // if more than two seconds has ellapsed without a pulse we've lost sync
-      sei();
+    cli();
+    PPSrateRatio=((double)1000000.0/(double)(PPSavgMicroS));
+    if ((long)(micros()-(PPSlastMicroS+2000000UL)) > 0) PPSsynced=false; // if more than two seconds has ellapsed without a pulse we've lost sync
+    sei();
   #if LED_STATUS2 == ON
     if (trackingState == TrackingSidereal) {
       if (PPSsynced) { if (led2On) { digitalWrite(LEDneg2Pin,HIGH); led2On=false; } else { digitalWrite(LEDneg2Pin,LOW); led2On=true; } } else { digitalWrite(LEDneg2Pin,HIGH); led2On=false; } // indicate PPS
     }
   #endif
-      if (LastPPSrateRatio != PPSrateRatio) { SiderealClockSetInterval(siderealInterval); LastPPSrateRatio=PPSrateRatio; }
+    if (LastPPSrateRatio != PPSrateRatio) { SiderealClockSetInterval(siderealInterval); LastPPSrateRatio=PPSrateRatio; }
 #endif
 
 #if LED_STATUS == ON
@@ -632,47 +619,64 @@ void loop2() {
   #endif
 #endif
 
-    // SAFETY CHECKS, keeps mount from tracking past the meridian limit, past the AXIS1_LIMIT_MAX, or past the Dec limits
+    // SAFETY CHECKS -------------------------------------------------------------------------------------
+    // keeps mount from tracking past the meridian limit, past the AXIS1_LIMIT_MAX, or past the Dec limits
     if (safetyLimitsOn) {
+      // check for exceeding AXIS1_LIMIT_MIN or AXIS1_LIMIT_MAX
+      if (getInstrAxis1() < axis1Settings.min) { generalError=(MOUNT_TYPE==ALTAZM)?ERR_AZM:ERR_UNDER_POLE; stopSlewing(SS_LIMIT_AXIS1_MIN); } else
+      if (getInstrAxis1() > axis1Settings.max) { generalError=(MOUNT_TYPE==ALTAZM)?ERR_AZM:ERR_UNDER_POLE; stopSlewing(SS_LIMIT_AXIS1_MAX); } else
+      // check for exceeding Meridian Limits
       if (meridianFlip != MeridianFlipNever) {
         if (getInstrPierSide() == PierSideWest) {
-          if (getInstrAxis1() > degreesPastMeridianW) {
-            if (autoMeridianFlip) {
-              if (goToHere(true) != CE_NONE) { generalError=ERR_MERIDIAN; trackingState=TrackingNone; }
-            } else {
-              generalError=ERR_MERIDIAN; stopLimit();
-            }
-          }
+          if (getInstrAxis1() > degreesPastMeridianW && (!(autoMeridianFlip && goToHere(true) == CE_NONE))) { generalError=ERR_MERIDIAN; stopSlewing(SS_LIMIT_AXIS1_MAX); }
         } else
-        if (getInstrPierSide() == PierSideEast) {
-          if (getInstrAxis1() < -degreesPastMeridianE) { generalError=ERR_MERIDIAN; stopLimit(); }
-          if (getInstrAxis1() > AXIS1_LIMIT_MAX) { generalError=ERR_UNDER_POLE; stopLimit(); }
-        }
-      } else {
-#if MOUNT_TYPE != ALTAZM
-        // when Fork mounted, ignore pierSide and just stop the mount if it passes the UnderPoleLimit
-        if (getInstrAxis1() > AXIS1_LIMIT_MAX) { generalError=ERR_UNDER_POLE; stopLimit(); }
-#else
-        // when Alt/Azm mounted, just stop the mount if it passes AXIS1_LIMIT_MAX
-        if (getInstrAxis1() > AXIS1_LIMIT_MAX) { generalError=ERR_AZM; stopLimit(); }
-#endif
+        if (getInstrAxis1() < -degreesPastMeridianE) { generalError=ERR_MERIDIAN; stopSlewing(SS_LIMIT_AXIS1_MIN); }
       }
     }
+    double a2; if (AXIS2_TANGENT_ARM == ON) { cli(); a2=posAxis2/axis2Settings.stepsPerDegree; sei(); } else a2=getInstrAxis2();
     // check for exceeding AXIS2_LIMIT_MIN or AXIS2_LIMIT_MAX
-#if MOUNT_TYPE != ALTAZM
-  #if AXIS2_TANGENT_ARM == ON
-      cli(); double d=posAxis2/AXIS2_STEPS_PER_DEGREE; sei();
-      if (d < AXIS2_LIMIT_MIN) { generalError=ERR_DEC; decMinLimit(); } else
-      if (d > AXIS2_LIMIT_MAX) { generalError=ERR_DEC; decMaxLimit(); } else
-      if (trackingState == TrackingSidereal && generalError == ERR_DEC) generalError=ERR_NONE;
-  #else
-      if (currentDec < AXIS2_LIMIT_MIN) { generalError=ERR_DEC; decMinLimit(); }
-      if (currentDec > AXIS2_LIMIT_MAX) { generalError=ERR_DEC; decMaxLimit(); }
-  #endif
-#endif
+    if (a2 < axis2Settings.min) { generalError=ERR_DEC; stopSlewing(SS_LIMIT_AXIS2_MIN); } else
+    if (a2 > axis2Settings.max) { generalError=ERR_DEC; stopSlewing(SS_LIMIT_AXIS2_MAX); } else
+    // automatically clear error in TA mode
+    if (AXIS2_TANGENT_ARM == ON && (trackingState == TrackingSidereal && generalError == ERR_DEC)) generalError=ERR_NONE;
 
   } else {
     // COMMAND PROCESSING --------------------------------------------------------------------------------
     processCommands();
+  }
+}
+
+// stops fast motion as required
+// SS_ALL_FAST stops slewing but not tracking
+// SS_LIMIT stops gotos + spiral guides + tracking
+// SS_LIMIT_HARD stops slewing + tracking
+// SS_LIMIT_AXIS1_MIN stops gotos + spiral guides + tracking, also stops/blocks RA/Az guides in the wrong direction
+// SS_LIMIT_AXIS1_MAX stops gotos + spiral guides + tracking, also stops/blocks RA/Az guides in the wrong direction
+// SS_LIMIT_AXIS2_MIN stops gotos + spiral guides + tracking, also stops/blocks Dec/Alt guides in the wrong direction
+// SS_LIMIT_AXIS2_MAX stops gotos + spiral guides + tracking, also stops/blocks Dec/Alt guides in the wrong direction
+void stopSlewing(StopSlewActions ss) {
+  if (trackingState == TrackingMoveTo) {
+    if (!abortSlew) abortSlew=StartAbortSlew;
+  } else {
+    if (spiralGuide) stopGuideSpiral();
+    if (ss == SS_ALL_FAST || ss == SS_LIMIT_HARD) { stopGuideAxis1(); stopGuideAxis2(); } else
+    if (ss == SS_LIMIT_AXIS1_MIN) {
+      if (guideDirAxis1 == 'e' ) guideDirAxis1='b';
+    } else
+    if (ss == SS_LIMIT_AXIS1_MAX) {
+      if (guideDirAxis1 == 'w' ) guideDirAxis1='b';
+    } else
+    if (ss == SS_LIMIT_AXIS2_MIN) {
+      if (getInstrPierSide() == PierSideWest) { if (guideDirAxis2 == 'n' ) guideDirAxis2='b'; } else if (guideDirAxis2 == 's' ) guideDirAxis2='b';
+    } else
+    if (ss == SS_LIMIT_AXIS2_MAX) {
+      if (getInstrPierSide() == PierSideWest) { if (guideDirAxis2 == 's' ) guideDirAxis2='b'; } else if (guideDirAxis2 == 'n' ) guideDirAxis2='b';
+    }
+    if (trackingState != TrackingNone) {
+      if (ss != SS_ALL_FAST) {
+        if (generalError != ERR_DEC) { stopGuideAxis1(); stopGuideAxis2(); trackingState=TrackingNone; }
+        DLF("WRN, stopSlewing(): Limit exceeded tracking/slewing stopped");
+      }
+    }
   }
 }
