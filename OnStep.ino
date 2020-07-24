@@ -41,7 +41,7 @@
 #define FirmwareDate          __DATE__
 #define FirmwareVersionMajor  4
 #define FirmwareVersionMinor  11      // minor version 0 to 99
-#define FirmwareVersionPatch  "c"     // for example major.minor patch: 1.3c
+#define FirmwareVersionPatch  "d"     // for example major.minor patch: 1.3c
 #define FirmwareVersionConfig 3       // internal, for tracking configuration file changes
 #define FirmwareName          "On-Step"
 #define FirmwareTime          __TIME__
@@ -320,11 +320,7 @@ void setup() {
     tmcAxis3.setup(AXIS3_DRIVER_INTPOL,AXIS3_DRIVER_DECAY_MODE,AXIS3_DRIVER_CODE,axis3Settings.IRUN,AXIS3_DRIVER_IHOLD);
   #endif
   
-  #if AXIS3_DRIVER_POWER_DOWN == ON
-    rot.powerDownActive(true);
-  #else
-    rot.powerDownActive(false);
-  #endif
+  rot.powerDownActive(AXIS3_DRIVER_POWER_DOWN == ON);
 #endif
 
   // start focusers if present
@@ -341,11 +337,7 @@ void setup() {
     tmcAxis4.setup(AXIS4_DRIVER_INTPOL,AXIS4_DRIVER_DECAY_MODE,AXIS4_DRIVER_CODE,axis4Settings.IRUN,AXIS4_DRIVER_IHOLD);
   #endif
 
-  #if AXIS4_DRIVER_POWER_DOWN == ON
-    foc1.powerDownActive(true);
-  #else
-    foc1.powerDownActive(false);
-  #endif
+  foc1.powerDownActive(AXIS4_DRIVER_POWER_DOWN == ON);
 #endif
 
 #if FOCUSER2 == ON
@@ -361,11 +353,7 @@ void setup() {
     tmcAxis5.setup(AXIS5_DRIVER_INTPOL,AXIS5_DRIVER_DECAY_MODE,AXIS5_DRIVER_CODE,axis5Settings.IRUN,AXIS5_DRIVER_IHOLD);
   #endif
 
-  #if AXIS5_DRIVER_POWER_DOWN == ON
-    foc2.powerDownActive(true);
-  #else
-    foc2.powerDownActive(false);
-  #endif
+  foc2.powerDownActive(AXIS5_DRIVER_POWER_DOWN == ON);
 #endif
 
   // finally clear the comms channels
@@ -504,8 +492,8 @@ void loop2() {
 
     if (safetyLimitsOn) {
       // check altitude overhead limit and horizon limit
-      if (currentAlt < minAlt) { generalError=ERR_ALT_MIN; if (MOUNT_TYPE == ALTAZM) stopSlewingAndTracking(SS_LIMIT_AXIS2_MIN); else stopSlewingAndTracking(SS_LIMIT); }
-      if (currentAlt > maxAlt) { generalError=ERR_ALT_MAX; if (MOUNT_TYPE == ALTAZM) stopSlewingAndTracking(SS_LIMIT_AXIS2_MAX); else stopSlewingAndTracking(SS_LIMIT); }
+      if (currentAlt < minAlt) { generalError=ERR_ALT_MIN; stopSlewingAndTracking((MOUNT_TYPE == ALTAZM)?SS_LIMIT_AXIS2_MIN:SS_LIMIT); }
+      if (currentAlt > maxAlt) { generalError=ERR_ALT_MAX; stopSlewingAndTracking((MOUNT_TYPE == ALTAZM)?SS_LIMIT_AXIS2_MAX:SS_LIMIT); }
     }
 
     // OPTION TO POWER DOWN AXIS2 IF NOT MOVING
