@@ -41,7 +41,7 @@
 #define FirmwareDate          __DATE__
 #define FirmwareVersionMajor  4
 #define FirmwareVersionMinor  11      // minor version 0 to 99
-#define FirmwareVersionPatch  "d"     // for example major.minor patch: 1.3c
+#define FirmwareVersionPatch  "e"     // for example major.minor patch: 1.3c
 #define FirmwareVersionConfig 3       // internal, for tracking configuration file changes
 #define FirmwareName          "On-Step"
 #define FirmwareTime          __TIME__
@@ -471,7 +471,7 @@ void loop2() {
       if (limit_2nd == LIMIT_SENSE_STATE) {
         // It is still low, there must be a problem
         generalError=ERR_LIMIT_SENSE;
-        stopLimit();
+        stopSlewingAndTracking(SS_LIMIT);
       } 
     }
 #endif
