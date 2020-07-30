@@ -41,7 +41,7 @@
 #define FirmwareDate          __DATE__
 #define FirmwareVersionMajor  4
 #define FirmwareVersionMinor  12      // minor version 0 to 99
-#define FirmwareVersionPatch  "a"     // for example major.minor patch: 1.3c
+#define FirmwareVersionPatch  "c"     // for example major.minor patch: 1.3c
 #define FirmwareVersionConfig 3       // internal, for tracking configuration file changes
 #define FirmwareName          "On-Step"
 #define FirmwareTime          __TIME__
@@ -56,7 +56,7 @@
 
 // Enable additional debugging and/or status messages on the specified DebugSer port
 // Note that the DebugSer port cannot be used for normal communication with OnStep
-#define DEBUG VERBOSE         // default=OFF, use "DEBUG ON" for background errors only, use "DEBUG VERBOSE" for all errors and status messages
+#define DEBUG OFF             // default=OFF, use "DEBUG ON" for background errors only, use "DEBUG VERBOSE" for all errors and status messages
 #define DebugSer SerialA      // default=SerialA, or Serial4 for example (always 9600 baud)
 
 #include <errno.h>
@@ -637,7 +637,10 @@ void loop2() {
 // SS_LIMIT_AXIS2_MAX stops gotos + spiral guides + tracking, also stops/blocks Dec/Alt guides in the wrong direction
 void stopSlewingAndTracking(StopSlewActions ss) {
   if (trackingState == TrackingMoveTo) {
-    if (!abortSlew) abortSlew=StartAbortSlew;
+    if (!abortGoto) {
+      abortGoto=StartAbortGoto;
+      VLF("MSG: Goto aborted");
+    }
   } else {
     if (spiralGuide) stopGuideSpiral();
     if (ss == SS_ALL_FAST || ss == SS_LIMIT_HARD) { stopGuideAxis1(); stopGuideAxis2(); } else
@@ -655,8 +658,12 @@ void stopSlewingAndTracking(StopSlewActions ss) {
     }
     if (trackingState != TrackingNone) {
       if (ss != SS_ALL_FAST) {
-        if (generalError != ERR_DEC) { stopGuideAxis1(); stopGuideAxis2(); trackingState=TrackingNone; }
-        DLF("WRN, stopSlewingAndTracking(): Limit exceeded slewing/tracking stopped");
+        if (generalError != ERR_DEC) {
+          stopGuideAxis1();
+          stopGuideAxis2();
+          trackingState=TrackingNone;
+          VLF("MSG: Limit exceeded guiding/tracking stopped");
+        }
       }
     }
   }

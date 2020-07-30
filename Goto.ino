@@ -90,6 +90,8 @@ CommandErrors syncEqu(double RA, double Dec) {
   setIndexAxis2(Axis2,newPierSide);
   syncToEncodersOnly=true;
 
+  VLF("MSG: Sync, indices set");
+
   return CE_NONE;
 }
 
@@ -122,6 +124,8 @@ CommandErrors syncEnc(double EncAxis1, double EncAxis2) {
   indexAxis1=(double)indexAxis1Steps/axis1Settings.stepsPerMeasure;
   indexAxis2Steps-=delta2;
   indexAxis2=(double)indexAxis2Steps/axis2Settings.stepsPerMeasure;
+
+  VLF("MSG: Encoder sync, indices set");
 
   return CE_NONE;
 }
@@ -229,7 +233,7 @@ CommandErrors goToEqu(double RA, double Dec) {
   // validate
   CommandErrors e=validateGoto();
 #ifndef CE_GOTO_ERR_GOTO_OFF
-  if (e == CE_GOTO_ERR_GOTO) { if (!abortSlew) abortSlew=StartAbortSlew; } 
+  if (e == CE_GOTO_ERR_GOTO) { if (!abortGoto) abortGoto=StartAbortGoto; } 
 #endif
   if (e != CE_NONE) return e;
   e=validateGotoCoords(HA,Dec,a);
@@ -298,7 +302,6 @@ CommandErrors goToHor(double *Alt, double *Azm) {
 CommandErrors goTo(double thisTargetAxis1, double thisTargetAxis2, double altTargetAxis1, double altTargetAxis2, int gotoPierSide) {
   atHome=false;
   int thisPierSide=getInstrPierSide();
-  DL("Goto started");
   if (meridianFlip != MeridianFlipNever) {
     // where the allowable hour angles are
     double eastOfPierMaxHA= 180.0;
