@@ -41,7 +41,7 @@
 #define FirmwareDate          __DATE__
 #define FirmwareVersionMajor  4
 #define FirmwareVersionMinor  12      // minor version 0 to 99
-#define FirmwareVersionPatch  "c"     // for example major.minor patch: 1.3c
+#define FirmwareVersionPatch  "h"     // for example major.minor patch: 1.3c
 #define FirmwareVersionConfig 3       // internal, for tracking configuration file changes
 #define FirmwareName          "On-Step"
 #define FirmwareTime          __TIME__
@@ -208,6 +208,10 @@ void setup() {
   VLF("MSG: Init pins");
   initPins();
 
+  // get the TLS ready (if present)
+  VLF("MSG: Init TLS");
+  if (!tls.init()) generalError=ERR_SITE_INIT;
+  
   // Check the Non-Volatile Memory
   VLF("MSG: Start NV");
   if (!nv.init()) {
@@ -241,7 +245,11 @@ void setup() {
   initGuide();
  
   // get weather monitoring ready to go
+#ifdef ONEWIRE_DEVICES_PRESENT
+  VLF("MSG: Init weather and 1-Wire");
+#else
   VLF("MSG: Init weather");
+#endif
   if (!ambient.init()) generalError=ERR_WEATHER_INIT;
 
   // setup features
@@ -249,10 +257,6 @@ void setup() {
   VLF("MSG: Init auxiliary features");
   featuresInit();
 #endif
-
-  // get the TLS ready (if present)
-  VLF("MSG: Init TLS");
-  if (!tls.init()) generalError=ERR_SITE_INIT;
 
   // this sets up the sidereal timer and tracking rates
   VLF("MSG: Init sidereal timer");
@@ -321,7 +325,7 @@ void setup() {
   VLF("MSG: Init focuser1");
   foc1.init(Axis4_STEP,Axis4_DIR,Axis4_EN,EE_posAxis4,EE_tcfCoefAxis4,EE_tcfEnAxis4,AXIS4_STEP_RATE_MAX,axis4Settings.stepsPerMeasure,axis4Settings.min*1000.0,axis4Settings.max*1000.0,AXIS4_LIMIT_MIN_RATE);
   if (AXIS4_DRIVER_DC_MODE != OFF) { foc1.initDcPower(EE_dcPwrAxis4); foc1.setPhase1(); }
-  if (AXIS4_DRIVER_REVERSE == ON) foc1.setReverseState(HIGH);
+  if (axis4Settings.reverse == ON) foc1.setReverseState(HIGH);
   foc1.setDisableState(AXIS4_DRIVER_DISABLE);
 
   #if AXIS4_DRIVER_MODEL == TMC_SPI
