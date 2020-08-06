@@ -32,12 +32,16 @@
  *
  */
 
+#ifdef ESP32 //drew
+  #define bleGamepad_ON   // set to bleGamepad_ON to allow BLE gamepad connection. ESP32 only
+#endif
+
 #define Product "WiFi Server"
 #define FirmwareDate          __DATE__
 #define FirmwareTime          __TIME__
 #define FirmwareVersionMajor  "1"
 #define FirmwareVersionMinor  "14"
-#define FirmwareVersionPatch  "c"
+#define FirmwareVersionPatch  "x" //drew
 
 #define Version FirmwareVersionMajor "." FirmwareVersionMinor FirmwareVersionPatch
 
@@ -55,7 +59,12 @@
 #endif
 #include <EEPROM.h>
 
-#define DEBUG_OFF   // Turn _ON to allow web and cmd channel servers to startup without OnStep (Serial port for debug at 115200 baud)
+#define DEBUG_ON   // Turn _ON to allow web and cmd channel servers to startup without OnStep (Serial port for debug at 115200 baud)
+
+#ifdef bleGamepad_ON //drew
+  #include <BLEDevice.h>
+  #include "BleGamepad.h"
+#endif
 
 #include "Constants.h"
 #include "Locales.h"
@@ -417,12 +426,22 @@ TryAgain:
 #if ENCODERS == ON
   encoders.init();
 #endif
+
+#ifdef bleGamepad_ON //drew
+  bleSetup(); 
+#endif
+
 }
 
 void loop(void) {
   server.handleClient();
 #if ENCODERS == ON
   encoders.poll();
+#endif
+
+#ifdef bleGamepad_ON //drew
+  bleCenter();
+  bleConnTest(); 
 #endif
 
 #if STANDARD_COMMAND_CHANNEL == ON
