@@ -179,6 +179,9 @@ void handleNotFound(){
 #include "MountStatus.h"
 
 void setup(void){
+  WiFi.disconnect();
+  WiFi.softAPdisconnect(true);
+
 #if LED_STATUS != OFF
   pinMode(LED_STATUS,OUTPUT);
 #endif
@@ -344,39 +347,28 @@ Again:
 #endif
 
 TryAgain:
+  if ((stationEnabled) && (!stationDhcpEnabled)) WiFi.config(wifi_sta_ip, wifi_sta_gw, wifi_sta_sn);
+  if (accessPointEnabled) WiFi.softAPConfig(wifi_ap_ip, wifi_ap_gw, wifi_ap_sn);
+  
   if (accessPointEnabled && !stationEnabled) {
     WiFi.softAP(wifi_ap_ssid, wifi_ap_pwd, wifi_ap_ch);
-    delay(2000);
-    WiFi.softAPConfig(wifi_ap_ip, wifi_ap_gw, wifi_ap_sn);
-
     WiFi.mode(WIFI_AP);
   } else
   if (!accessPointEnabled && stationEnabled) {
-    WiFi.softAPdisconnect(true);
-
     WiFi.begin(wifi_sta_ssid, wifi_sta_pwd);
-    delay(2000);
-    if (!stationDhcpEnabled) WiFi.config(wifi_sta_ip, wifi_sta_gw, wifi_sta_sn);
-
     WiFi.mode(WIFI_STA);
   } else
   if (accessPointEnabled && stationEnabled) {
     WiFi.softAP(wifi_ap_ssid, wifi_ap_pwd, wifi_ap_ch);
-    delay(2000);
-    WiFi.softAPConfig(wifi_ap_ip, wifi_ap_gw, wifi_ap_sn);
-
     WiFi.begin(wifi_sta_ssid, wifi_sta_pwd);
-    delay(2000);
-    if (!stationDhcpEnabled) WiFi.config(wifi_sta_ip, wifi_sta_gw, wifi_sta_sn);
-
     WiFi.mode(WIFI_AP_STA);
   }
 
   // wait for connection in station mode, if it fails fall back to access-point mode
   if (!accessPointEnabled && stationEnabled) {
-     for (int i=0; i<5; i++)
-      if (WiFi.status() != WL_CONNECTED) delay(1000); else break;
+    for (int i=0; i<5; i++) if (WiFi.status() != WL_CONNECTED) delay(1000); else break;
     if (WiFi.status() != WL_CONNECTED) {
+      WiFi.disconnect(); delay(3000);
       stationEnabled=false;
       accessPointEnabled=true;
       goto TryAgain;
