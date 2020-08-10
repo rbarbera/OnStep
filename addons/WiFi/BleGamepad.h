@@ -2,8 +2,7 @@
 // Bluetooth Gamepad variables
 
 // These must match your device exactly otherwise it will not connect!
-#define ServerName  "Magicsee R1"      // change this if your device uses a different name
-String My_BLE_Address = "ff:ff:70:08:12:bc"; //Hardware Bluetooth MAC
+String My_BLE_Address = "ff:ff:de:09:78:a0"; //Hardware Bluetooth MAC
 
 // This is the blue LED on the Wemos ESP32 module
 #define bleLED    2      // GPIO 2 -> Blue LED
