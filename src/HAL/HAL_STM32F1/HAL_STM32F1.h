@@ -34,15 +34,16 @@
 #define HAL_SERIAL_B_ENABLED
 
 // New symbol for the default I2C port -------------------------------------------------------------
+#include <Wire.h>
 #define HAL_Wire Wire
+#define HAL_WIRE_CLOCK 100000
 
 // Non-volatile storage ------------------------------------------------------------------------------
-#if defined(NV_AT24C32)
-  #include "../drivers/NV_I2C_EEPROM_AT24C32_C.h"
-#elif defined(NV_MB85RC256V)
+#if defined(NV_MB85RC256V)
   #include "../drivers/NV_I2C_FRAM_MB85RC256V.h"
 #else
-  #include "../drivers/NV_I2C_EEPROM_AT24C32_C.h"
+  // defaults to 0x57 and 4KB
+  #include "../drivers/NV_I2C_EEPROM_24XX_C.h"
 #endif
 
 //--------------------------------------------------------------------------------------------------
@@ -55,7 +56,7 @@ void delayNanoseconds(unsigned int n) {
 
 //--------------------------------------------------------------------------------------------------
 // General purpose initialize for HAL
-void HAL_Init(void) {
+void HAL_Initialize(void) {
   // calibrate delayNanoseconds()
   uint32_t startTime,npp;
   cli(); startTime=micros(); delayNanoseconds(65535); npp=micros(); sei(); npp=((int32_t)(npp-startTime)*1000)/63335;

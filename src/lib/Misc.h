@@ -29,7 +29,7 @@ bool atof2(char *a, double *d, bool sign=true) {
 }
 
 // convert axis settings string into numeric form
-boolean decodeAxisSettings(char s[], axisSettings &a) {
+bool decodeAxisSettings(char s[], axisSettings &a) {
   if (strcmp(s,"0") != 0) {
     char *ws=s;
     char *conv_end;
@@ -55,7 +55,7 @@ boolean decodeAxisSettings(char s[], axisSettings &a) {
 }
 
 // convert axis settings string into numeric form
-boolean validateAxisSettings(int axisNum, boolean altAz, volatile axisSettings &a) {
+bool validateAxisSettings(int axisNum, bool altAz, volatile axisSettings &a) {
   int   MinLimitL[5]   = {-180,-90,-360,  0,  0};
   int   MinLimitH[5]   = { -90,  0,   0,500,500};
   int   MaxLimitL[5]   = {  90,  0,   0,  0,  0};
@@ -65,12 +65,12 @@ boolean validateAxisSettings(int axisNum, boolean altAz, volatile axisSettings &
   int   IrunLimitH[5]  = { 3000, 3000, 1000, 1000, 1000};
   if (altAz) { MinLimitL[0]=-360; MinLimitH[0]=-180; MaxLimitL[0]=180; MaxLimitH[0]=360; }
   axisNum--;
-  if (a.stepsPerMeasure < StepsLimitL[axisNum] || a.stepsPerMeasure > StepsLimitH[axisNum]) { DF("ERR, validateAxisSettings(): Axis"); D(axisNum); DF(" bad stepsPerMeasure="); DL(a.stepsPerMeasure); return false; }
-  if (a.microsteps != OFF && (a.microsteps < 1 || a.microsteps > 256)) { DF("ERR, validateAxisSettings(): Axis"); D(axisNum); DF(" bad microsteps="); DL(a.microsteps); return false; }
-  if (a.IRUN != OFF && (a.IRUN < 0 || a.IRUN > IrunLimitH[axisNum])) { DF("ERR, validateAxisSettings(): Axis"); D(axisNum); DF(" bad IRUN="); DL(a.IRUN); return false; }
-  if (a.reverse != OFF && a.reverse != ON) { DF("ERR, validateAxisSettings(): Axis"); D(axisNum); DF(" bad reverse="); DL(a.reverse); return false; }
-  if (a.min < MinLimitL[axisNum] || a.min > MinLimitH[axisNum]) { DF("ERR, validateAxisSettings(): Axis"); D(axisNum); DF(" bad min="); DL(a.min); return false; }
-  if (a.max < MaxLimitL[axisNum] || a.max > MaxLimitH[axisNum]) { DF("ERR, validateAxisSettings(): Axis"); D(axisNum); DF(" bad max="); DL(a.max); return false; }
+  if (a.stepsPerMeasure < StepsLimitL[axisNum] || a.stepsPerMeasure > StepsLimitH[axisNum]) { DF("ERR, validateAxisSettings(): Axis"); D(axisNum+1); DF(" bad stepsPerMeasure="); DL(a.stepsPerMeasure); return false; }
+  if (a.microsteps != OFF && (a.microsteps < 1 || a.microsteps > 256)) { DF("ERR, validateAxisSettings(): Axis"); D(axisNum+1); DF(" bad microsteps="); DL(a.microsteps); return false; }
+  if (a.IRUN != OFF && (a.IRUN < 0 || a.IRUN > IrunLimitH[axisNum])) { DF("ERR, validateAxisSettings(): Axis"); D(axisNum+1); DF(" bad IRUN="); DL(a.IRUN); return false; }
+  if (a.reverse != OFF && a.reverse != ON) { DF("ERR, validateAxisSettings(): Axis"); D(axisNum+1); DF(" bad reverse="); DL(a.reverse); return false; }
+  if (a.min < MinLimitL[axisNum] || a.min > MinLimitH[axisNum]) { DF("ERR, validateAxisSettings(): Axis"); D(axisNum+1); DF(" bad min="); DL(a.min); return false; }
+  if (a.max < MaxLimitL[axisNum] || a.max > MaxLimitH[axisNum]) { DF("ERR, validateAxisSettings(): Axis"); D(axisNum+1); DF(" bad max="); DL(a.max); return false; }
   return true;
 }
 

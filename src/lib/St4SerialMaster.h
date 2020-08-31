@@ -137,6 +137,11 @@ class Mst4 : public Stream
       delayMicroseconds(XMIT_TIME);
 
       lastMicros=micros();
+
+      if (_frame_error) DLF("WRN, SerialST4.trans(): frame error");
+      if (_send_error) DLF("WRN, SerialST4.trans(): send parity error");
+      if (_recv_error) DLF("WRN, SerialST4.trans(): recv parity error");
+
       if (_frame_error) return false; else return true;
     }
 

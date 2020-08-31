@@ -40,8 +40,8 @@
 // firmware info, these are returned by the ":GV?#" commands
 #define FirmwareDate          __DATE__
 #define FirmwareVersionMajor  4
-#define FirmwareVersionMinor  12      // minor version 0 to 99
-#define FirmwareVersionPatch  "h"     // for example major.minor patch: 1.3c
+#define FirmwareVersionMinor  15      // minor version 0 to 99
+#define FirmwareVersionPatch  "c"     // for example major.minor patch: 1.3c
 #define FirmwareVersionConfig 3       // internal, for tracking configuration file changes
 #define FirmwareName          "On-Step"
 #define FirmwareTime          __TIME__
@@ -52,7 +52,7 @@
 // This option forces that initialization again.
 // Change to ON, upload OnStep and nv will be reset to default. Then immediately set to OFF and upload again.
 // *** IMPORTANT: This option must not be left set to true or it will cause excessive wear of EEPROM or FLASH ***
-#define NV_INIT_KEY_RESET OFF
+#define NV_FACTORY_RESET OFF
 
 // Enable additional debugging and/or status messages on the specified DebugSer port
 // Note that the DebugSer port cannot be used for normal communication with OnStep
@@ -177,7 +177,7 @@ void setup() {
   
   // Call hardware specific initialization
   VLF("MSG: Init HAL");
-  HAL_Init();
+  HAL_Initialize();
 
   VLF("MSG: Init serial");
   SerialA.begin(SERIAL_A_BAUD_DEFAULT);
@@ -213,8 +213,9 @@ void setup() {
   if (!tls.init()) generalError=ERR_SITE_INIT;
   
   // Check the Non-Volatile Memory
-  VLF("MSG: Start NV");
+  VF("MSG: Start NV ");
   if (!nv.init()) {
+    VLF("");
     SerialA.print("NV (EEPROM) failure!#\r\n");
     while (true) {
       delay(10);
@@ -223,11 +224,12 @@ void setup() {
       #endif
     }
   }
+  V(E2END+1); VLF(" Bytes");
 
   // if this is the first startup set EEPROM to defaults
   initWriteNvValues();
 
-  // now read any saved values from EEPROM into varaibles to restore our last state
+  // now read any saved values from EEPROM into variables to restore our last state
   VLF("MSG: Read NV settings");
   initReadNvValues();
 
@@ -261,7 +263,7 @@ void setup() {
   // this sets up the sidereal timer and tracking rates
   VLF("MSG: Init sidereal timer");
   siderealInterval=nv.readLong(EE_siderealInterval); // the number of 16MHz clocks in one sidereal second (this is scaled to actual processor speed)
-  if (siderealInterval < 14360682L || siderealInterval > 17551944L) { siderealInterval=15956313L; DLF("ERR, setup(): bad NV siderealInterval"); }
+  if (siderealInterval < 14360682L || siderealInterval > 17551944L) { DF("ERR, setup(): bad NV siderealInterval ("); D(siderealInterval); DL(")"); siderealInterval=masterSiderealInterval; }
   siderealRate=siderealInterval/stepsPerSecondAxis1;
   timerRateAxis1=siderealRate;
   timerRateAxis2=siderealRate;
@@ -536,6 +538,15 @@ void loop2() {
     
     // WEATHER
     if (!isSlewing()) ambient.poll();
+
+    // MONITOR NV CACHE
+#if DEBUG == VERBOSE
+    static bool lastCommitted=true;
+    bool committed=nv.committed();
+    if (committed && !lastCommitted) { DLF("MSG: NV commit done"); lastCommitted=committed; }
+    if (!committed && lastCommitted) { DLF("MSG: NV data in cache"); lastCommitted=committed; }
+#endif
+
   }
 
   // FASTEST POLLING -----------------------------------------------------------------------------------

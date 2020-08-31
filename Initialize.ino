@@ -162,13 +162,14 @@ void initPins() {
 
 void initWriteNvValues() {
   // EEPROM automatic initialization
-  if (NV_INIT_KEY_RESET == ON) nv.writeLong(EE_autoInitKey,0);
+  if (NV_FACTORY_RESET == ON) nv.writeLong(EE_autoInitKey,0);
 
   if (nv.readLong(EE_autoInitKey) != NV_INIT_KEY) {
-    VLF("MSG: Init all NV defaults");
-
     // wipe the whole nv memory
+    VF("MSG: Wipe NV "); V(E2END+1); VLF(" Bytes (please wait)");
     for (int i=0; i<E2END; i++) nv.write(i,0);
+
+    VLF("MSG: Init NV to defaults");
 
     // default stepper driver setup is from Config.h
     nv.write(EE_settingsRuntime,0);
@@ -228,7 +229,7 @@ void initWriteNvValues() {
 
     // init the sidereal tracking rate
     // 1/16uS resolution timer, ticks per sidereal second
-    nv.writeLong(EE_siderealInterval,siderealInterval);
+    nv.writeLong(EE_siderealInterval,masterSiderealInterval);
 
     // set default focuser positions at zero
     nv.writeLong(EE_posAxis4,0L);
@@ -288,16 +289,16 @@ void initReadNvValues() {
   useTimerRateRatio = axis1Settings.stepsPerMeasure != axis2Settings.stepsPerMeasure;
 
   #if AXIS1_DRIVER_MODEL != SERVO && AXIS1_DRIVER_MODEL != SERVO1 && AXIS1_DRIVER_MODEL != SERVO2
-    axis1StepsGoto = axis1Settings.microsteps/AXIS1_DRIVER_MICROSTEPS_GOTO;
+    if (AXIS1_DRIVER_MICROSTEPS_GOTO != OFF) axis1StepsGoto = axis1Settings.microsteps/AXIS1_DRIVER_MICROSTEPS_GOTO;
   #else
-    axis1StepsGoto = AXIS1_DRIVER_MICROSTEPS_GOTO/axis1Settings.microsteps;
+    if (AXIS1_DRIVER_MICROSTEPS_GOTO != OFF) axis1StepsGoto = AXIS1_DRIVER_MICROSTEPS_GOTO/axis1Settings.microsteps;
   #endif
   #if AXIS2_DRIVER_MODEL != SERVO && AXIS2_DRIVER_MODEL != SERVO1 && AXIS2_DRIVER_MODEL != SERVO2
-    axis2StepsGoto = axis2Settings.microsteps/AXIS2_DRIVER_MICROSTEPS_GOTO;
+    if (AXIS2_DRIVER_MICROSTEPS_GOTO != OFF) axis2StepsGoto = axis2Settings.microsteps/AXIS2_DRIVER_MICROSTEPS_GOTO;
   #else
-    axis2StepsGoto = AXIS2_DRIVER_MICROSTEPS_GOTO/axis2Settings.microsteps;
+    if (AXIS2_DRIVER_MICROSTEPS_GOTO != OFF) axis2StepsGoto = AXIS2_DRIVER_MICROSTEPS_GOTO/axis2Settings.microsteps;
   #endif
-
+  
   // Basic stepper driver mode setup
   // if we made through validation and AXIS1_DRIVER_MODEL exists; AXIS2_DRIVER_MODEL, axis1Settings.microsteps,
   // and axis2Settings.microsteps also exist and passed validation in the pre-processor
@@ -383,14 +384,14 @@ void initReadNvValues() {
   secondsPerWormRotationAxis1=stepsPerWormRotationAxis1/stepsPerSecondAxis1;
   if (MOUNT_TYPE == ALTAZM) pecBufferSize=0; else pecBufferSize=ceil(stepsPerWormRotationAxis1/(axis1Settings.stepsPerMeasure/240.0));
   if (pecBufferSize != 0) {
-    if (pecBufferSize < 61 || pecBufferSize > 3384) { pecBufferSize=0; generalError=ERR_NV_INIT; DLF("PEC: warning invalid pecBufferSize, PEC disabled"); }
-    if (200+pecBufferSize > E2END-200) { pecBufferSize=0; generalError=ERR_NV_INIT; DLF("PEC: warning buffer exceeds available NV, PEC disabled"); }
+    if (pecBufferSize < 61) { pecBufferSize=0; generalError=ERR_NV_INIT; DLF("ERR, initReadNvValues(): invalid pecBufferSize, PEC disabled"); }
+    if (200+pecBufferSize >= E2END-200) { pecBufferSize=0; generalError=ERR_NV_INIT; DLF("ERR, initReadNvValues(): pecBufferSize exceeds available NV, PEC disabled"); }
   }
   if (secondsPerWormRotationAxis1 > pecBufferSize) secondsPerWormRotationAxis1=pecBufferSize;
 
 #if MOUNT_TYPE != ALTAZM
   createPecBuffer();
-  boolean pecBufferNeedsInit=true;
+  bool pecBufferNeedsInit=true;
   for (int i=0; i < pecBufferSize; i++) { pecBuffer[i]=nv.read(EE_pecTable+i); if (pecBuffer[i] != 0) pecBufferNeedsInit=false; }
   if (pecBufferNeedsInit) for (int l=0; l < pecBufferSize; l++) nv.write(EE_pecTable+l,128);
   wormSensePos=nv.readLong(EE_wormSensePos); // validation of this value is not useful

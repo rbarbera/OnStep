@@ -53,7 +53,9 @@
 #endif
 
 // New symbol for the default I2C port -------------------------------------------------------------
+#include <Wire.h>
 #define HAL_Wire Wire
+#define HAL_WIRE_CLOCK 100000
 
 // Non-volatile storage ----------------------------------------------------------------------------
 #if defined(NV_AT24C32)
@@ -66,7 +68,7 @@
 
 //--------------------------------------------------------------------------------------------------
 // General purpose initialize for HAL
-void HAL_Init(void) {
+void HAL_Initialize(void) {
 }
 
 //--------------------------------------------------------------------------------------------------
