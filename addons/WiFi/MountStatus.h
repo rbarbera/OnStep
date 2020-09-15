@@ -7,7 +7,7 @@ enum MountTypes {MT_UNKNOWN, MT_GEM, MT_FORK, MT_FORKALT, MT_ALTAZM};
 enum Errors {
   ERR_NONE, ERR_MOTOR_FAULT, ERR_ALT_MIN, ERR_LIMIT_SENSE, ERR_DEC, ERR_AZM, 
   ERR_UNDER_POLE, ERR_MERIDIAN, ERR_SYNC, ERR_PARK, ERR_GOTO_SYNC, ERR_UNSPECIFIED,
-  ERR_ALT_MAX, ERR_WEATHER_INIT, ERR_SITE_INIT};
+  ERR_ALT_MAX, ERR_WEATHER_INIT, ERR_SITE_INIT, ERR_NV_INIT};
 
 #define PierSideNone     0
 #define PierSideEast     1
@@ -48,6 +48,7 @@ class MountStatus {
       _pecPlaying  = strstr(s,"~");
       _pecReadyRec = strstr(s,";");
       _pecRecording= strstr(s,"^");
+      if (!_pecRecording && !_pecReadyRec && !_pecPlaying && !_pecReadyPlay && !_pecIgnore && !_pecRecorded) _pecEnabled=false; else _pecEnabled=true;
     
       _toEncOnly   = strstr(s,"e");
       _atHome      = strstr(s,"H");
@@ -133,6 +134,7 @@ class MountStatus {
     bool parked() { return _parked; }
     bool parking() { return _parking; }
     bool parkFail() { return _parkFail; }
+    bool pecEnabled() { return _pecEnabled; }
     bool pecIgnore() { return _pecIgnore; }
     bool pecReadyPlay() { return _pecReadyPlay; }
     bool pecPlaying() { return _pecPlaying; }
@@ -280,6 +282,7 @@ class MountStatus {
       if (_lastError==ERR_ALT_MAX) strcpy(message,L_GE_ALT_MAX); else
       if (_lastError==ERR_WEATHER_INIT) strcpy(message,L_GE_WEATHER_INIT); else
       if (_lastError==ERR_SITE_INIT) strcpy(message,L_GE_SITE_INIT); else
+      if (_lastError==ERR_NV_INIT) strcpy(message,L_GE_NV_INIT); else
         sprintf(message,L_GE_OTHER " %d",(int)_lastError);
       return message[0];
     }
@@ -305,6 +308,7 @@ class MountStatus {
     bool _parked=false;
     bool _parking=false;
     bool _parkFail=false;
+    bool _pecEnabled=false;
     bool _pecIgnore=false;
     bool _pecReadyPlay=false;
     bool _pecPlaying=false;

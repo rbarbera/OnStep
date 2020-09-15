@@ -98,7 +98,6 @@
 
 // misc. errors/workload
 #define L_INTERNAL_TEMP "内部控制器温度"
-#define L_CMD_ERROR_LOG "命令错误日志"
 #define L_LAST_GENERAL_ERROR "最后一个一般(背景)错误"
 #define L_WORKLOAD "工作量"
 #define L_WIRELESS_SIGNAL_STRENGTH "无线 信号强度"
@@ -401,6 +400,7 @@
 #define L_GE_ALT_MAX "超出上限"
 #define L_GE_WEATHER_INIT "天气传感器初始化失败"
 #define L_GE_SITE_INIT "RTC初始化失败"
+#define L_GE_NV_INIT "初始化 NV/EEPROM 损坏"
 #define L_GE_OTHER "未知错误，代码"
 
 // command errors

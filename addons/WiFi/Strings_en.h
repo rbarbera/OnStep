@@ -98,7 +98,6 @@
 
 // misc. errors/workload
 #define L_INTERNAL_TEMP "Controller Internal Temperature"
-#define L_CMD_ERROR_LOG "Command Error Log"
 #define L_LAST_GENERAL_ERROR "Last General (Background) Error"
 #define L_WORKLOAD "Workload"
 #define L_WIRELESS_SIGNAL_STRENGTH "Wireless signal strength"
@@ -401,6 +400,7 @@
 #define L_GE_ALT_MAX "Above overhead limit"
 #define L_GE_WEATHER_INIT "Weather sensor init failed"
 #define L_GE_SITE_INIT "Time or Location not updated"
+#define L_GE_NV_INIT "Init NV/EEPROM bad"
 #define L_GE_OTHER "Unknown Error, code"
 
 // command errors
