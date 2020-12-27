@@ -40,8 +40,8 @@
 // firmware info, these are returned by the ":GV?#" commands
 #define FirmwareDate          __DATE__
 #define FirmwareVersionMajor  4
-#define FirmwareVersionMinor  16      // minor version 0 to 99
-#define FirmwareVersionPatch  "f"     // for example major.minor patch: 1.3c
+#define FirmwareVersionMinor  23      // minor version 0 to 99
+#define FirmwareVersionPatch  "e"     // for example major.minor patch: 1.3c
 #define FirmwareVersionConfig 3       // internal, for tracking configuration file changes
 #define FirmwareName          "On-Step"
 #define FirmwareTime          __TIME__
@@ -50,7 +50,7 @@
 
 // On first upload OnStep automatically initializes a host of settings in nv memory (EEPROM.)
 // This option forces that initialization again.
-// Change to ON, upload OnStep and nv will be reset to default. Then immediately set to OFF and upload again.
+// Change to ON, upload OnStep and nv will be reset to default. Wait about 30 seconds then set to OFF and upload again.
 // *** IMPORTANT: This option must not be left set to true or it will cause excessive wear of EEPROM or FLASH ***
 #define NV_FACTORY_RESET OFF
 
@@ -109,6 +109,11 @@
 #include "src/lib/Weather.h"
 weather ambient;
 
+#if SERIAL_B_ESP_FLASHING == ON || defined(AddonTriggerPin)
+  #include "src/lib/flashAddon.h"
+  flashAddon fa;
+#endif
+
 #if ROTATOR == ON
   #include "src/lib/Rotator.h"
   rotator rot;
@@ -161,26 +166,35 @@ weather ambient;
 #endif
 
 void setup() {
-  // early pin initialization
   initPre();
-  
+
+  // initialize the ESP8266 Addon flasher
+#if SERIAL_B_ESP_FLASHING == ON
+  fa.init(-1,AddonResetPin,AddonBootModePin);
+#elif defined(AddonTriggerPin)
+  fa.init(AddonTriggerPin,AddonResetPin,AddonBootModePin);
+#endif
+
   // take a half-second to let any connected devices come up before we start setting up pins
   delay(500);
 
 #if DEBUG != OFF
-  // Initialize USB serial debugging early, so we can use DebugSer.print() for debugging, if needed
+  // initialize USB serial debugging early, so we can use DebugSer.print() for debugging, if needed
   DebugSer.begin(9600); delay(5000); DebugSer.flush(); VLF(""); VLF("");
 #endif
 
-  // Say hello
+  // say hello
   VF("MSG: OnStep "); V(FirmwareVersionMajor); V("."); V(FirmwareVersionMinor); VL(FirmwareVersionPatch);
-  VF("MSG: MCU =  "); V(MCU_STR); V(", "); VF("Pinmap = "); VL(PINMAP_STR);
+  VF("MSG: MCU =  "); VF(MCU_STR); V(", "); VF("Pinmap = "); VLF(PINMAP_STR);
 
-  // Call hardware specific initialization
+  // call hardware specific initialization
   VLF("MSG: Init HAL");
   HAL_Initialize();
 
   VLF("MSG: Init serial");
+
+  // take a half-second to let the serial buffer empty before possibly restarting the debug port
+  delay(500);
   SerialA.begin(SERIAL_A_BAUD_DEFAULT);
 #ifdef HAL_SERIAL_B_ENABLED
   #ifdef SERIAL_B_RX
@@ -193,7 +207,11 @@ void setup() {
   SerialC.begin(SERIAL_C_BAUD_DEFAULT);
 #endif
 #ifdef HAL_SERIAL_D_ENABLED
-  SerialD.begin(SERIAL_D_BAUD_DEFAULT);
+  #ifdef SERIAL_D_RX
+    SerialD.begin(SERIAL_D_BAUD_DEFAULT, SERIAL_8N1, SERIAL_D_RX, SERIAL_D_TX);
+  #else
+    SerialD.begin(SERIAL_D_BAUD_DEFAULT);
+  #endif
 #endif
 #ifdef HAL_SERIAL_E_ENABLED
   SerialE.begin(SERIAL_E_BAUD_DEFAULT);
@@ -202,7 +220,7 @@ void setup() {
   SerialST4.begin();
 #endif
 
-  // Take another two seconds to be sure Serial ports are online
+  // take another two seconds to be sure Serial ports are online
   delay(2000);
 
   // set pins for input/output as specified in Config.h and PinMap.h
@@ -253,7 +271,7 @@ void setup() {
 #else
   VLF("MSG: Init weather");
 #endif
-  if (!ambient.init()) generalError=ERR_WEATHER_INIT;
+  if (!ambient.init() && WEATHER_SUPRESS_ERRORS == OFF) generalError=ERR_WEATHER_INIT;
 
   // setup features
 #ifdef FEATURES_PRESENT
@@ -287,18 +305,20 @@ void setup() {
 #if TRACK_AUTOSTART == ON
   #if MOUNT_TYPE != ALTAZM
 
-    // tailor behaviour depending on TLS presence
+    // tailor behavior depending on TLS presence
     if (!tls.active) {
-      VLF("MSG: Tracking autostart - no TLS, limits disabled");
+      VLF("MSG: Tracking autostart - TLS/orientation unknown, limits disabled");
       setHome();
       safetyLimitsOn=false;
     } else {
-      if (parkStatus == Parked) {
-        VLF("MSG: Tracking autostart - assuming TLS is correct, limits enabled and automatic unpark");
-        unPark(true);
-      } else {
-        VLF("MSG: Tracking autostart - assuming TLS is correct, limits enabled");
+      if (parkStatus != Parked) {
+        VLF("MSG: Tracking autostart - TLS/orientation unknown, limits disabled");
         setHome();
+        safetyLimitsOn=false;
+      } else {
+        // parking implies the orientation of the mount and the location are known
+        VLF("MSG: Tracking autostart - assuming TLS/orientation are correct, limits enabled and automatic unpark");
+        unPark(true);
       }
     }
 
@@ -345,7 +365,7 @@ void setup() {
     tmcAxis4.setup(AXIS4_DRIVER_INTPOL,AXIS4_DRIVER_DECAY_MODE,AXIS4_DRIVER_CODE,axis4Settings.IRUN,axis4SettingsEx.IHOLD);
   #endif
 
-  foc1.powerDownActive(AXIS4_DRIVER_POWER_DOWN == ON);
+  foc1.powerDownActive(AXIS4_DRIVER_POWER_DOWN == ON, AXIS4_DRIVER_POWER_DOWN == STARTUP);
 #endif
 
 #if FOCUSER2 == ON
@@ -361,7 +381,7 @@ void setup() {
     tmcAxis5.setup(AXIS5_DRIVER_INTPOL,AXIS5_DRIVER_DECAY_MODE,AXIS5_DRIVER_CODE,axis5Settings.IRUN,axis5SettingsEx.IHOLD);
   #endif
 
-  foc2.powerDownActive(AXIS5_DRIVER_POWER_DOWN == ON);
+  foc2.powerDownActive(AXIS5_DRIVER_POWER_DOWN == ON, AXIS5_DRIVER_POWER_DOWN == STARTUP);
 #endif
 
   // finally clear the comms channels
@@ -549,16 +569,24 @@ void loop2() {
     if (!isSlewing()) ambient.poll();
 
     // MONITOR NV CACHE
-#if DEBUG == VERBOSE
+#if DEBUG == VERBOSE && DEBUG_NV == ON
     static bool lastCommitted=true;
     bool committed=nv.committed();
     if (committed && !lastCommitted) { DLF("MSG: NV commit done"); lastCommitted=committed; }
     if (!committed && lastCommitted) { DLF("MSG: NV data in cache"); lastCommitted=committed; }
 #endif
 
+    // TRIGGER ESPFLASH
+#if defined(AddonTriggerPin)
+    fa.poll();
+#endif
   }
 
   // FASTEST POLLING -----------------------------------------------------------------------------------
+#if AXIS1_DRIVER_MODEL == TMC_SPI
+  autoModeSwitch();
+#endif
+
 #if ROTATOR == ON
   rot.follow(isSlewing());
 #endif

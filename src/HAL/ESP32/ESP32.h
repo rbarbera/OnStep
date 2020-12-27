@@ -30,6 +30,22 @@
   #define SERIAL_C_BAUD_DEFAULT SERIAL_C_BLUETOOTH_NAME
 #endif
 
+// SerialD
+#if PINMAP == InsteinESP1
+  #ifndef SERIAL_D_BAUD_DEFAULT
+    #define SERIAL_D_BAUD_DEFAULT 9600
+  #endif
+  #define SerialD Serial1
+  #define SERIAL_D_RX 21
+  #define SERIAL_D_TX 22
+  #define HAL_SERIAL_D_ENABLED
+#elif defined(SERIAL_D_BAUD_DEFAULT)
+  #if SERIAL_D_BAUD_DEFAULT != OFF
+    #define SerialD Serial1
+    #define HAL_SERIAL_D_ENABLED
+  #endif
+#endif
+
 // New symbol for the default I2C port ---------------------------------------------------------------
 #include <Wire.h>
 #define HAL_Wire Wire

@@ -39,14 +39,20 @@ volatile long runTimerRateAxis1=0;
 volatile long runTimerRateAxis2=0;
 
 volatile uint32_t nextAxis1Rate = 100000UL;
-volatile uint16_t slowAxis1Cnt = 0;
-volatile uint16_t slowAxis1Rep = 1;
+volatile uint16_t nextAxis1Rep = 1;
+#if defined(AXIS1_DRIVER_CODE_GOTO)
+volatile uint32_t nextAxis1GotoRate = 100000UL;
+volatile uint16_t nextAxis1GotoRep = 1;
+#endif
 volatile long timerDirAxis1 = 0;
 volatile long thisTimerRateAxis1 = 10000UL;
 
 volatile uint32_t nextAxis2Rate = 100000UL;
-volatile uint16_t slowAxis2Cnt = 0;
-volatile uint16_t slowAxis2Rep = 1;
+volatile uint16_t nextAxis2Rep = 1;
+#if defined(AXIS2_DRIVER_CODE_GOTO)
+volatile uint32_t nextAxis2GotoRate = 100000UL;
+volatile uint16_t nextAxis2GotoRep = 1;
+#endif
 volatile long timerDirAxis2 = 0;
 volatile long thisTimerRateAxis2 = 10000UL;
 
@@ -206,20 +212,26 @@ void timerSupervisor(bool isCentiSecond) {
   if (inbacklashAxis2) thisTimerRateAxis2=timerRateBacklashAxis2;
 
   // trigger goto step mode
-  #if defined(AXIS1_DRIVER_CODE) && defined(AXIS1_DRIVER_CODE_GOTO) && MODE_SWITCH_BEFORE_SLEW == OFF
+#if defined(AXIS1_DRIVER_CODE) && defined(AXIS1_DRIVER_CODE_GOTO) && MODE_SWITCH_BEFORE_SLEW == OFF
   gotoRateAxis1=(thisTimerRateAxis1 < AXIS1_DRIVER_SWITCH_RATE);
-  #endif
-  #if defined(AXIS2_DRIVER_CODE) && defined(AXIS2_DRIVER_CODE_GOTO) && MODE_SWITCH_BEFORE_SLEW == OFF
+#endif
+#if defined(AXIS2_DRIVER_CODE) && defined(AXIS2_DRIVER_CODE_GOTO) && MODE_SWITCH_BEFORE_SLEW == OFF
   gotoRateAxis2=(thisTimerRateAxis2 < AXIS2_DRIVER_SWITCH_RATE);
-  #endif
+#endif
 
   // set the rates
   if (thisTimerRateAxis1 != isrTimerRateAxis1) {
-    PresetTimerInterval(thisTimerRateAxis1/ppsRateRatio, TIMER_PULSE_STEP, &nextAxis1Rate, &slowAxis1Rep);
+#if defined(AXIS1_DRIVER_CODE_GOTO)
+    PresetTimerInterval((thisTimerRateAxis1/ppsRateRatio)*axis1StepsGoto, TIMER_PULSE_STEP, &nextAxis1GotoRate, &nextAxis1GotoRep);
+#endif
+    PresetTimerInterval(thisTimerRateAxis1/ppsRateRatio, TIMER_PULSE_STEP, &nextAxis1Rate, &nextAxis1Rep);
     isrTimerRateAxis1=thisTimerRateAxis1;
   }
   if (thisTimerRateAxis2 != isrTimerRateAxis2) {
-    PresetTimerInterval(thisTimerRateAxis2/ppsRateRatio, TIMER_PULSE_STEP, &nextAxis2Rate, &slowAxis2Rep);
+#if defined(AXIS2_DRIVER_CODE_GOTO)
+    PresetTimerInterval((thisTimerRateAxis2/ppsRateRatio)*axis2StepsGoto, TIMER_PULSE_STEP, &nextAxis2GotoRate, &nextAxis2GotoRep);
+#endif
+    PresetTimerInterval(thisTimerRateAxis2/ppsRateRatio, TIMER_PULSE_STEP, &nextAxis2Rate, &nextAxis2Rep);
     isrTimerRateAxis2=thisTimerRateAxis2;
   }
 }
@@ -230,9 +242,17 @@ IRAM_ATTR ISR(TIMER3_COMPA_vect)
   HAL_TIMER3_PREFIX;
 #endif
 
-  if (slowAxis1Rep > 1) { slowAxis1Cnt++; if (slowAxis1Cnt%slowAxis1Rep != 0) goto done; }
+  static uint16_t count = 0;
+#if defined(AXIS1_DRIVER_CODE_GOTO)
+  if (stepAxis1 != 1) { if (nextAxis1GotoRep > 1) { count++; if (count%nextAxis1GotoRep != 0) goto done; } } else
+#endif
+  if (nextAxis1Rep > 1) { count++; if (count%nextAxis1Rep != 0) goto done; }
 
+#if MODE_SWITCH_BEFORE_SLEW == OFF && AXIS1_DRIVER_MODEL == TMC_SPI && defined(AXIS1_DRIVER_CODE_GOTO)
+  if (haltAxis1 || axis1ModeSwitchState == MSS_READY) goto done;
+#else
   if (haltAxis1) goto done;
+#endif
 
 #if STEP_WAVE_FORM != DEDGE
   a1CLEAR;
@@ -243,36 +263,36 @@ IRAM_ATTR ISR(TIMER3_COMPA_vect)
     takeStepAxis1=false;
 #endif
 
-#if defined(AXIS1_DRIVER_CODE) && defined(AXIS1_DRIVER_CODE_GOTO) && MODE_SWITCH_BEFORE_SLEW == OFF
+#if MODE_SWITCH_BEFORE_SLEW == OFF && defined(AXIS1_DRIVER_CODE_GOTO)
   // switch micro-step mode
   if (gotoModeAxis1 != gotoRateAxis1) {
     // only when at an allowed position
     if (gotoModeAxis1 || (posAxis1+blAxis1)%axis1StepsGoto == 0) {
-#if AXIS1_DRIVER_MODEL == TMC_SPI
-      if (!_spiInUse)
-#endif
-      { if (gotoModeAxis1) { gotoModeAxis1=false; stepAxis1=1; axis1DriverTrackingFast(); } else { gotoModeAxis1=true; stepAxis1=axis1StepsGoto; axis1DriverGotoFast(); } }
+      if (gotoModeAxis1) { gotoModeAxis1=false; axis1DriverTrackingFast(); } else { gotoModeAxis1=true; axis1DriverGotoFast(); }
     }
   }
 #endif
 
 #if STEP_WAVE_FORM != SQUARE
-  QuickSetIntervalAxis1(nextAxis1Rate*stepAxis1);
+#if defined(AXIS1_DRIVER_CODE_GOTO)
+  if (stepAxis1 != 1) QuickSetIntervalAxis1(nextAxis1GotoRate); else
+#endif
+  QuickSetIntervalAxis1(nextAxis1Rate);
 #endif
 
   if ((trackingState != TrackingMoveTo) && (!inbacklashAxis1)) targetAxis1.part.m+=timerDirAxis1*stepAxis1;
 
   // move the RA/Azm stepper to the target
-#if MODE_SWITCH_BEFORE_SLEW == OFF
-  if ((posAxis1 != (long)targetAxis1.part.m) || inbacklashAxis1) {
-#else
+#if MODE_SWITCH_BEFORE_SLEW == ON || (AXIS1_DRIVER_MODEL == TMC_SPI && defined(AXIS1_DRIVER_CODE_GOTO))
   if ((labs(posAxis1 - (long)targetAxis1.part.m) >= stepAxis1) || inbacklashAxis1) {
+#else
+  if ((posAxis1 != (long)targetAxis1.part.m) || inbacklashAxis1) {
 #endif
 
     // set direction
     if (posAxis1 < (long)targetAxis1.part.m) dirAxis1=1; else dirAxis1=0;
     if (defaultDirAxis1 == dirAxis1) a1DIR_H; else a1DIR_L;
-  
+
     // telescope moves WEST with the sky, blAxis1 is the amount of EAST backlash
     if (dirAxis1 == 1) {
       if (blAxis1 < backlashAxis1) { blAxis1+=stepAxis1; inbacklashAxis1=true; } else { inbacklashAxis1=false; posAxis1+=stepAxis1; }
@@ -288,7 +308,10 @@ IRAM_ATTR ISR(TIMER3_COMPA_vect)
     if (takeStepAxis1) a1STEP;
     clearAxis1=true;
 
-    QuickSetIntervalAxis1(nextAxis1Rate*stepAxis1);
+#if defined(AXIS1_DRIVER_CODE_GOTO)
+    if (stepAxis1 != 1) QuickSetIntervalAxis1(nextAxis1GotoRate); else
+#endif
+    QuickSetIntervalAxis1(nextAxis1Rate);
   }
 #else
 #if STEP_WAVE_FORM == DEDGE
@@ -312,9 +335,17 @@ IRAM_ATTR ISR(TIMER4_COMPA_vect)
   HAL_TIMER4_PREFIX;
 #endif
 
-  if (slowAxis2Rep > 1) { slowAxis2Cnt++; if (slowAxis2Cnt%slowAxis2Rep != 0) goto done; }
+  static uint16_t count = 0;
+#if defined(AXIS2_DRIVER_CODE_GOTO)
+  if (stepAxis2 != 1) { if (nextAxis2GotoRep > 1) { count++; if (count%nextAxis2GotoRep != 0) goto done; } } else
+#endif
+  if (nextAxis2Rep > 1) { count++; if (count%nextAxis2Rep != 0) goto done; }
 
+#if MODE_SWITCH_BEFORE_SLEW == OFF && AXIS2_DRIVER_MODEL == TMC_SPI && defined(AXIS2_DRIVER_CODE_GOTO)
+  if (haltAxis2 || axis2ModeSwitchState == MSS_READY) goto done;
+#else
   if (haltAxis2) goto done;
+#endif
 
 #if STEP_WAVE_FORM != DEDGE
   a2CLEAR;
@@ -325,32 +356,32 @@ IRAM_ATTR ISR(TIMER4_COMPA_vect)
     takeStepAxis2=false;
 #endif
 
-#if defined(AXIS2_DRIVER_CODE) && defined(AXIS2_DRIVER_CODE_GOTO) && MODE_SWITCH_BEFORE_SLEW == OFF
+#if MODE_SWITCH_BEFORE_SLEW == OFF && defined(AXIS2_DRIVER_CODE_GOTO)
   // switch micro-step mode
   if (gotoModeAxis2 != gotoRateAxis2) {
     // only when at an allowed position
-    if ((gotoModeAxis2) || ((posAxis2+blAxis2)%axis2StepsGoto == 0)) {
-#if AXIS2_DRIVER_MODEL == TMC_SPI
-      if (!_spiInUse)
-#endif
-      { if (gotoModeAxis2) { gotoModeAxis2=false; stepAxis2=1; axis2DriverTrackingFast(); } else { gotoModeAxis2=true; stepAxis2=axis2StepsGoto; axis2DriverGotoFast(); } }
+    if (gotoModeAxis2 || (posAxis2+blAxis2)%axis2StepsGoto == 0) {
+      if (gotoModeAxis2) { gotoModeAxis2=false; axis2DriverTrackingFast(); } else { gotoModeAxis2=true; axis2DriverGotoFast(); }
     }
   }
 #endif
 
 #if STEP_WAVE_FORM != SQUARE
-  QuickSetIntervalAxis2(nextAxis2Rate*stepAxis2);
+#if defined(AXIS2_DRIVER_CODE_GOTO)
+  if (stepAxis2 != 1) QuickSetIntervalAxis2(nextAxis2GotoRate); else
+#endif
+  QuickSetIntervalAxis2(nextAxis2Rate);
 #endif
 
   if ((trackingState != TrackingMoveTo) && (!inbacklashAxis2)) targetAxis2.part.m+=timerDirAxis2*stepAxis2;
 
   // move the Dec/Alt stepper to the target
-#if MODE_SWITCH_BEFORE_SLEW == OFF
-  if (axis2Powered && ((posAxis2 != (long)targetAxis2.part.m) || inbacklashAxis2)) {
-#else
+#if MODE_SWITCH_BEFORE_SLEW == ON || (AXIS2_DRIVER_MODEL == TMC_SPI && defined(AXIS2_DRIVER_CODE_GOTO))
   if (axis2Powered && ((labs(posAxis2 - (long)targetAxis2.part.m) >= stepAxis2) || inbacklashAxis2)) {
+#else
+  if (axis2Powered && ((posAxis2 != (long)targetAxis2.part.m) || inbacklashAxis2)) {
 #endif
-    
+
     // set direction
     if (posAxis2 < (long)targetAxis2.part.m) dirAxis2=1; else dirAxis2=0;
     if (defaultDirAxis2 == dirAxis2) a2DIR_H; else a2DIR_L;
@@ -370,7 +401,10 @@ IRAM_ATTR ISR(TIMER4_COMPA_vect)
     if (takeStepAxis2) a2STEP;
     clearAxis2=true;
 
-    QuickSetIntervalAxis2(nextAxis2Rate*stepAxis2);
+#if defined(AXIS2_DRIVER_CODE_GOTO)
+    if (stepAxis2 != 1) QuickSetIntervalAxis2(nextAxis2GotoRate); else
+#endif
+    QuickSetIntervalAxis2(nextAxis2Rate);
   }
 #else
 #if STEP_WAVE_FORM == DEDGE

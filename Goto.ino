@@ -6,7 +6,7 @@ CommandErrors validateGoto() {
   // Check state
   if (parkStatus != NotParked)                 return CE_SLEW_ERR_IN_PARK;
   if (!axis1Enabled)                           return CE_SLEW_ERR_IN_STANDBY;
-  if (trackingSyncInProgress())                return CE_GOTO_ERR_GOTO;
+  if (trackingSyncInProgress())                return CE_MOUNT_IN_MOTION;
   if (trackingState == TrackingMoveTo)         return CE_GOTO_ERR_GOTO;
   if (guideDirAxis1 || guideDirAxis2)          return CE_MOUNT_IN_MOTION;
   if (faultAxis1 || faultAxis2)                return CE_SLEW_ERR_HARDWARE_FAULT;
@@ -46,7 +46,8 @@ CommandErrors syncEqu(double RA, double Dec) {
 
   // validate
   CommandErrors e=validateGoto();
-  if (e != CE_NONE && e != CE_SLEW_ERR_IN_STANDBY) return e;
+  if (e == CE_SLEW_ERR_IN_STANDBY && atHome) { trackingState=TrackingSidereal; enableStepperDrivers(); e=validateGoto(); }
+  if (e != CE_NONE) return e;
   e=validateGotoCoords(HA,Dec,a);
   if (e != CE_NONE) return e;
 
@@ -58,9 +59,6 @@ CommandErrors syncEqu(double RA, double Dec) {
 #else
   Align.equToInstr(HA,Dec,&Axis1,&Axis2,getInstrPierSide());
 #endif
-
-  // just turn on tracking
-  if (atHome) { trackingState=TrackingSidereal; enableStepperDrivers(); }
 
   // west side of pier - we're in the eastern sky and the HA's are negative
   // east side of pier - we're in the western sky and the HA's are positive
@@ -88,6 +86,7 @@ CommandErrors syncEqu(double RA, double Dec) {
 
   setIndexAxis1(Axis1,newPierSide);
   setIndexAxis2(Axis2,newPierSide);
+  safetyLimitsOn=true;
   syncToEncodersOnly=true;
 
   VLF("MSG: Sync, indices set");
@@ -102,9 +101,19 @@ CommandErrors syncEnc(double EncAxis1, double EncAxis2) {
 
   // no sync from encoders during an alignment!
   if (alignActive()) return CE_NONE;
-  
+
   // force syncing to encoders only
   if (syncToEncodersOnly) return CE_NONE;
+
+  // don't allow syncing outside of our normal operating range
+  if (EncAxis1 < -360.0 || EncAxis2 < -360.0 || EncAxis1 > 360.0 || EncAxis2 > 360.0) {
+    DLF("MSG: Sync from Encoders ignored, Axis");
+    if (EncAxis1 < -360.0) DLF("1 < -360.0"); else
+    if (EncAxis2 < -360.0) DLF("2 < -360.0"); else
+    if (EncAxis1 > 360.0) DLF("1 > 360.0"); else
+    if (EncAxis2 > 360.0) DLF("2 > 360.0");
+    return CE_PARAM_RANGE;
+  }
 
   long e1=EncAxis1*axis1Settings.stepsPerMeasure;
   long e2=EncAxis2*axis2Settings.stepsPerMeasure;
@@ -125,7 +134,7 @@ CommandErrors syncEnc(double EncAxis1, double EncAxis2) {
   indexAxis2Steps-=delta2;
   indexAxis2=(double)indexAxis2Steps/axis2Settings.stepsPerMeasure;
 
-  VLF("MSG: Encoder sync, indices set");
+  VLF("MSG: Sync from Encoders, indices set");
 
   return CE_NONE;
 }
@@ -232,6 +241,7 @@ CommandErrors goToEqu(double RA, double Dec) {
 
   // validate
   CommandErrors e=validateGoto();
+  if (e == CE_SLEW_ERR_IN_STANDBY && atHome && timeWasSet && dateWasSet) { trackingState=TrackingSidereal; enableStepperDrivers(); e=validateGoto(); }
 #ifndef CE_GOTO_ERR_GOTO_OFF
   if (e == CE_GOTO_ERR_GOTO) { if (!abortGoto) abortGoto=StartAbortGoto; } 
 #endif

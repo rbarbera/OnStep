@@ -14,8 +14,8 @@
 #ifndef OneWirePin
   #define OneWirePin       Aux8     // Default Pin for OneWire bus
 #endif
-#define ESP8266Gpio0Pin      26     // ESP8266 GPIO0 (Dir2)
-#define ESP8266RstPin      Aux2     // ESP8266 RST
+#define AddonBootModePin     26     // ESP8266 GPIO0 (Dir2)
+#define AddonResetPin      Aux2     // ESP8266 RST
 
 // The PEC index sense is a logic level input, resets the PEC index on rising edge then waits for 60 seconds before allowing another reset
 #define PecPin               36
@@ -27,7 +27,9 @@
 #define ReticlePin         Aux8     // Drain
 
 // For a piezo buzzer
-#define TonePin            Aux8     // Tone
+#ifndef TonePin
+  #define TonePin          Aux8     // Tone
+#endif
 
 // The PPS pin is a 3.3V logic input, OnStep measures time between rising edges and adjusts the internal sidereal clock frequency
 #define PpsPin             Aux7     // PPS time source, GPS for example
@@ -46,7 +48,7 @@
 #define Axis1_HOME         Aux3     // Sense home position
 
 // Axis2 Dec/Alt step/dir driver
-#define Axis2_EN             12     // Enable
+#define Axis2_EN         SHARED     // Enable pin control shared with Axis1
 #define Axis2_M0             13     // Microstep Mode 0 or SPI MOSI
 #define Axis2_M1             14     // Microstep Mode 1 or SPI SCK
 #define Axis2_M2              5     // Microstep Mode 2 or SPI CS
@@ -57,17 +59,17 @@
 #define Axis2_HOME         Aux4     // Sense home position
 
 // For rotator stepper driver
-#define Axis3_EN             -1     // Enable
+#define Axis3_EN            OFF     // No enable pin control (always enabled)
 #define Axis3_STEP            2     // Step
 #define Axis3_DIR            15     // Dir
 
 // For focuser1 stepper driver
-#define Axis4_EN           Aux2     // Enable
+#define Axis4_EN           Aux2     // Enable pin on Aux2 but can be turned OFF during validation
 #define Axis4_STEP           19     // Step
 #define Axis4_DIR            15     // Dir
 
 // For focuser2 stepper driver
-#define Axis5_EN             -1     // Enable
+#define Axis5_EN            OFF     // No enable pin control (always enabled)
 #define Axis5_STEP            2     // Step
 #define Axis5_DIR            15     // Dir
 

@@ -12,6 +12,7 @@
 #define ClassicShield                2 // Original pin-map, for Steve's shield where ST4 port is on the Mega2560's "alternate pins"
 #define AltMega2560                  3 // Obsolete
 #define ClassicInstein               4 // Original pin-map with Instein ST4 port... this is not tested and I have no idea if it's safe to use!
+#define InsteinESP1                  5 // ESP32 Instein PINMAP (latest variant September/2020)
 
 // RAMPS - 3D printer shields/boards that work with OnStep, all are 5-axis designs
 #define Ramps14                     10 // Ramps v1.4 shield for Mega2560
@@ -21,8 +22,13 @@
 #define MksGenL2                    12 // Adds SPI bus to all stepper drivers (TMC only)
 #define MksGenL21                   13 // As above except Focuser2 CS is on pin12
 
+// RUMBA - 3D printer shields/board that works with OnStep, a 6-axis design with 5-axes supported
+#define Rumba                       14 // This is a new, experimental, pin-map use at your own risk! https://reprap.org/wiki/RUMBA
+
 // FYSETC S6 - 3D printer board that works with OnStep, a 6-axis design with 5-axes supported
-#define FYSETC_S6                   15
+#define FYSETC_S6                   15 // FYSETC S6 Version 1.2
+#define FYSETC_S6_1                 15 // FYSETC S6 Version 1.2
+#define FYSETC_S6_2                 16 // FYSETC S6 Version 2.0
 
 // Mini - Small 2-axis design suitable for embedded or mounting behind a panel can even be built with connectors up
 #define MiniPCB                     20 // All for Teensy3.2
@@ -37,6 +43,8 @@
 // Max2 & Max3 - Larger 4-axis design for aluminum case
 #define MaxPCB2                     41 // Improved "full feature" board, Teensy3.5/Teensy3.6
 #define MaxPCB3                     42 // Adds SPI bus to all stepper drivers (TMC only,) flashes WeMos D1 Mini through OnStep
+#define MaxSTM3                     43 // Update to the MaxPCB3 using an Blackpill F411CE instead of the Teensy3.5/3.6
+#define MaxSTM3I                    44 // As above but using an onboard STM32F411CE with M24C64 EEPROM as default
 
 #define MaxESP2                     50 // Similar to MaxPCB2 except 3 axes and uses cheaper/more available ESP32 MCU
 #define MaxESP3                     51 // Adds 4th axis and option to flash the WeMos D1 Mini WiFi through OnStep
@@ -66,7 +74,9 @@
 #define EAST                      -11
 #define WEST                      -12
 #define VHIGH                     -13
-#define INVALID               -999999
+#define SHARED                    -14
+#define STARTUP                   -15
+#define INVALID                -32767
 
 // mount types                     
 #define MOUNT_TYPE_FIRST            1
@@ -110,9 +120,11 @@
 #define AUXILLARY_FIRST             1
 #define SWITCH                      1
 #define ANALOG_OUTPUT               2
+#define ANALOG_OUT                  2
 #define DEW_HEATER                  3
 #define INTERVALOMETER              4
-#define AUXILLARY_LAST              4
+#define SWITCH_UNPARKED             5
+#define AUXILLARY_LAST              5
 
 // coordinate mode for getting and setting RA/Dec
 #define OBSERVED_PLACE              1
@@ -171,7 +183,9 @@
 #define EE_backlashAxis1            80  // 4
 #define EE_backlashAxis2            84  // 4
 #define EE_siderealInterval         88  // 4
-                                    
+
+#define EE_stepsPerWormRotAxis1     92  // 4
+
 #define EE_autoInitKey              96
 
 // site index: 100-199

@@ -9,10 +9,6 @@
   #define PINMAP_STR "Classic (Steve's Shield)"
   #include "Pins.Classic.h"
 #endif
-#if PINMAP == ClassicInstein
-  #define PINMAP_STR "Classic (Instein)"
-  #include "Pins.Classic.h"
-#endif
 #if PINMAP == Mega2560Alt
   #define PINMAP_STR "Alternate"
   #include "Pins.Mega2560Alt.h"
@@ -57,6 +53,10 @@
   #define PINMAP_STR "RAMPS v1.4"
   #include "Pins.Ramps14.h"
 #endif
+#if PINMAP == Rumba
+  #define PINMAP_STR "RUMBA"
+  #include "Pins.Rumba.h"
+#endif
 #if PINMAP == MksGenL1
   #define PINMAP_STR "MKS Gen-L v1"
   #include "Pins.Ramps14.h"
@@ -76,4 +76,20 @@
 #if PINMAP == FYSETC_S6
   #define PINMAP_STR "FYSETC S6"
   #include "Pins.FYSETC_S6.h"
+#endif
+#if PINMAP == FYSETC_S6_2
+  #define PINMAP_STR "FYSETC S6 v2"
+  #include "Pins.FYSETC_S6.h"
+#endif
+#if PINMAP == MaxSTM3 || PINMAP == MaxSTM3I
+  #define PINMAP_STR "MaxSTM v3"
+  #include "Pins.MaxSTM.h"
+#endif
+#if PINMAP == ClassicInstein
+  #define PINMAP_STR "Classic (Instein)"
+  #include "Pins.Classic.h"
+#endif
+#if PINMAP == InsteinESP1
+  #define PINMAP_STR "Instein (ESP32)"
+  #include "Pins.InsteinESP1.h"
 #endif

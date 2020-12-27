@@ -3,8 +3,6 @@
 
 #pragma once
 
-volatile bool _spiInUse = false;
-
 class bbspi {
   public:
     void init(int cs, int sck, int miso, int mosi) {
@@ -13,8 +11,6 @@ class bbspi {
 
     bool begin()
     {
-      if (_spiInUse) return false; _spiInUse=true;
-
       pinMode(_cs,OUTPUT); digitalWrite(_cs,HIGH);
       delaySPI;
       pinMode(_sck,OUTPUT); digitalWrite(_sck,HIGH);
@@ -37,7 +33,6 @@ class bbspi {
     void end() {
       digitalWrite(_cs, HIGH);
       delaySPI;
-      _spiInUse=false;
     }
     
     uint8_t transfer(uint8_t data_out)

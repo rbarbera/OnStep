@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "focuser.h"
+#include "Focuser.h"
 #include "StepperDC.h"
 
 class focuserDC : public focuser  {
@@ -83,10 +83,11 @@ class focuserDC : public focuser  {
     }
 
     // sets target position in steps
-    void setTarget(long pos) {
+    bool setTarget(long pos) {
       dcMotor.setPower((moveRate/1000.0)*powerFor1mmSec);
       target.part.m=pos; target.part.f=0;
       if ((long)target.part.m < smin) target.part.m=smin; if ((long)target.part.m > smax) target.part.m=smax;
+      return true;
     }
 
     // sets target relative position in steps
@@ -105,9 +106,9 @@ class focuserDC : public focuser  {
 
     void follow(bool mountSlewing) {
           
-      unsigned long microsNow=micros();
-      if ((long)(microsNow-nextPhysicalMove) > 0) {
-        nextPhysicalMove=microsNow+(unsigned long)(maxRate*1000.0);
+      unsigned long millisNow=millis();
+      if ((long)(millisNow-nextPhysicalMove) > 0) {
+        nextPhysicalMove=millisNow+(unsigned long)maxRate;
 
         // keep track of when motion starts and stops
         if (target.part.m != lastTarget) lastTarget=target.part.m;
@@ -135,7 +136,7 @@ class focuserDC : public focuser  {
         dcMotor.poll();
         lastPollingTime=millis();
         wasMoving=true;
-      } else if (wasMoving) if ((long)(tempMs-lastPollingTime) > maxRate+1) { dcMotor.enabled(false); wasMoving=false; }
+      } else if (wasMoving) if ((long)(millisNow-lastPollingTime) > maxRate+1) { dcMotor.enabled(false); wasMoving=false; }
     }
 
   private:

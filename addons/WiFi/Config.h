@@ -28,8 +28,8 @@
 
 // DISPLAY -------------------------------------------------------------------------------------------------------------------------
 #define DISPLAY_LANGUAGE             L_en //   L_en, English. Specify language with two letter country code, if supported.    Adjust
-#define DISPLAY_WEATHER               OFF //    OFF, ON Shows weather/ambient conditions (from OnStep) on status page.        Option
-#define DISPLAY_INTERNAL_TEMPERATURE  OFF //    OFF, ON for internal MCU temperature display.                                 Option
+#define DISPLAY_WEATHER               OFF //    OFF, ON ambient conditions in locale default units.                           Option
+#define DISPLAY_INTERNAL_TEMPERATURE  OFF //    OFF, ON internal MCU temp. in locale default units.                           Option
 #define DISPLAY_WIFI_SIGNAL_STRENGTH   ON //     ON, Wireless signal strength reported via web interface. OFF otherwise.      Option
 #define DISPLAY_SPECIAL_CHARS          ON //     ON, For standard ASCII special symbols (compatibility.)                      Infreq
 #define DISPLAY_ADVANCED_CHARS         ON //     ON, For standard "RA/Dec" instead of symbols.                                Infreq
@@ -39,26 +39,29 @@
 #define STANDARD_COMMAND_CHANNEL       ON //     ON, Enable standard cmd channel port 9999 use w/Android App & ASCOM driver.  Infreq
 #define PERSISTENT_COMMAND_CHANNEL     ON //     ON, Enable persistent cmd channel port 9998 use w/INDI? & Stellarium Mobile. Infreq
                                           //         Experimental, possibly causes problems w/standard cmd channel if enabled.
-#define MONITOR_GUIDE_COMMANDS        OFF //    OFF, Allow error reporting to also monitor guide commands.                    Infreq
 
 // ENCODER SUPPORT -----------------------------------------------------------------------------------------------------------------
-#define AXIS1_ENC                     OFF //    OFF, CWCCW, AB. RA/Azm Axis on Pin 5 (A or CW) and Pin 6 (B or CCW,)          Option
+#define ENC_AUTO_SYNC_DEFAULT          ON //     ON, Automatically sync Encoders to OnStep.                                   Option
+
+#define AXIS1_ENC                     OFF //    OFF, CWCCW, AB, BC_BISSC. RA/Azm Axis (A/CW/MA) & (B/CCW/SLO.)                Option
 #define AXIS1_ENC_REVERSE             OFF //    OFF, ON to reverse the count direction.                                       Adjust
 #define AXIS1_ENC_TICKS_DEG      22.22222 // 22.222, n, (ticks/degree.) Encoder ticks per degree.                             Adjust
-#define AXIS1_ENC_DIFF_LIMIT          300 //    300, n, (arcsec.) Maximum difference between encoder and OnStep before sync.  Adjust
+#define AXIS1_ENC_DIFF_LIMIT_TO       300 //    300, n, (arcsec.) Minimum diff. between encoder/OnStep for sync. to OnStep.   Adjust
+#define AXIS1_ENC_DIFF_LIMIT_FROM     OFF //    OFF, n, (arcsec.) Maximum diff. between encoder/OnStep for sync. from OnStep. Adjust
+                                          //         For absolute encoders, leave off when setting Zero, then enable.
 
-#define AXIS2_ENC                     OFF //    OFF, CWCCW, AB. Dec/Alt Axis on Pin 7 (A or CW) and Pin 8 (B or CCW)          Option
+#define AXIS2_ENC                     OFF //    OFF, CWCCW, AB, BC_BISSC. Dec/Alt Axis (A/CW/MA) & (B/CCW/SLO.)               Option
 #define AXIS2_ENC_REVERSE             OFF //    OFF, ON to reverse the count direction.                                       Option
 #define AXIS2_ENC_TICKS_DEG      22.22222 // 22.222, n, (ticks/degree.) Encoder ticks per degree.                             Adjust
-#define AXIS2_ENC_DIFF_LIMIT          300 //    300, n, (arcsec.) Maximum difference between encoder and OnStep before sync.  Adjust
-                                                     
-#define ENCODERS_AUTO_SYNC_DEFAULT    OFF //    OFF, ON To start with auto sync of OnStep to encoder values enabled.          Adjust
+#define AXIS2_ENC_DIFF_LIMIT_TO       300 //    300, n, (arcsec.) Minimum diff. between encoder/OnStep for sync. to OnStep.   Adjust
+#define AXIS2_ENC_DIFF_LIMIT_FROM     OFF //    OFF, n, (arcsec.) Maximum diff. between encoder/OnStep for sync. from OnStep. Adjust
+                                          //         For absolute encoders, leave off when setting Zero, then enable.
 
 // ENCODER RATE CONTROL
 #define AXIS1_ENC_RATE_CONTROL        OFF //    OFF, ON Rate control for RA high resolution encoder. EQ mounts only.          Infreq
 #define AXIS1_ENC_INTPOL_COS          OFF //    OFF, ON enables cosine compensation feature.                                  Infreq
-#define AXIS1_ENC_RATE_AUTO           OFF //    OFF, n, (Worm period in seconds.) Adjusts avg encoder pulse rate to account   Option
-                                          //         for skew in the average guide rate over the last worm period.            Option
+#define AXIS1_ENC_RATE_AUTO           OFF //    OFF, n, (Worm period in seconds.) Adjusts avg encoder pulse rate to account.  Option
+                                          //         For skew in the average guide rate over the last worm period.            Option
 #define AXIS1_ENC_BIN_AVG             OFF //    OFF, n, (Number of bins.)  Enables binned rolling average feature.            Option
 
 // THAT'S IT FOR USER CONFIGURATION!

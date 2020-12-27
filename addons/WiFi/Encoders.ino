@@ -62,13 +62,20 @@ L_ENC_SYNC_TO_ENC ": <br />"
 const char html_syncEncodersNow[] PROGMEM =
 L_ENC_SYNC_TO_ONS ": <br />"
 "<button name='ms' value='enc' type='submit'>" L_ENC_SYNC_NOW "</button>"
-"</form><br />";
+"<br />";
 
-const char html_encEn1[] PROGMEM =
-L_ENC_AUTO_SYNC " (<span id='aste'>?</span>):<br />";
+#ifdef ENC_HAS_ABSOLUTE
+const char html_zeroEncodersNow[] PROGMEM =
+L_ENC_ZERO_TO_ONS ": <br />"
+"<button name='ms' value='zro' type='submit'>" L_ENC_SYNC_NOW "</button>"
+"<br />";
+#endif
+
+const char html_encEn1[] PROGMEM = "<br /><br />"
+L_ENC_AUTO_SYNC ": <br />";
 const char html_encEn2[] PROGMEM =
-"<button type='button' onpointerdown=\"s('as','on')\" >" L_ON "</button>"
-"<button type='button' onpointerdown=\"s('as','off')\" >" L_OFF "</button>"
+"<button id='eas_on'  class='btns_right' onpointerdown=\"s('as','on')\"  type='button' disabled>" L_ON "</button>"
+"<button id='eas_off' class='btns_left'  onpointerdown=\"s('as','off')\" type='button' disabled>" L_OFF "</button>"
 "<br /><br />";
 
 const char html_encMxAxis0[] PROGMEM =
@@ -206,6 +213,10 @@ void handleEncoders() {
   data += FPSTR(html_main_css6);
   data += FPSTR(html_main_css7);
   data += FPSTR(html_main_css8);
+  data += FPSTR(html_main_css_btns1);
+  sendHtml(data);
+  data += FPSTR(html_main_css_btns2);
+  data += FPSTR(html_main_css_btns3);
   data += FPSTR(html_main_cssE);
   data += FPSTR(html_headE);
   data += FPSTR(html_bodyB);
@@ -243,6 +254,10 @@ void handleEncoders() {
 
   data += FPSTR(html_syncOnStepNow);
   data += FPSTR(html_syncEncodersNow);
+#ifdef ENC_HAS_ABSOLUTE
+  data += FPSTR(html_zeroEncodersNow);
+#endif
+  data += "</form>";
 
   // Autosync
   data += FPSTR(html_encEn1);
@@ -250,11 +265,10 @@ void handleEncoders() {
   sendHtml(data);
   
   // Encoder sync thresholds
-  sprintf_P(temp,html_encMxAxis0);
+  data += FPSTR(html_encMxAxis0);
+  sprintf_P(temp,html_encMxAxis1,Axis1EncDiffTo);
   data += temp;
-  sprintf_P(temp,html_encMxAxis1,Axis1EncDiffLimit);
-  data += temp;
-  sprintf_P(temp,html_encMxAxis2,Axis2EncDiffLimit);
+  sprintf_P(temp,html_encMxAxis2,Axis2EncDiffTo);
   data += temp;
   sendHtml(data);
   
@@ -375,7 +389,9 @@ if (guideCorrectionMillis<0) {
   data += "orc|"; if (encRateControl) data+=L_ON "\n"; else data+=L_OFF "\n";
   data += "osc|"; if (encSweep) data+=L_ON "\n"; else data+=L_OFF "\n";
 #endif
-  data += "aste|";  if (encAutoSync) data+=L_ON "\n"; else data+=L_OFF "\n";
+
+  data += "eas_on|";  if (encAutoSync) data+="disabled"; else data+="enabled"; data+="\n";
+  data += "eas_off|"; if (encAutoSync) data+="enabled"; else data+="disabled"; data+="\n";
 
 #ifdef OETHS
   client->print(data);
@@ -400,12 +416,14 @@ void encAjaxGet() {
 void processEncodersGet() {
   boolean EEwrite=false;
   String v;
-  char temp[20]="";
   
   v=server.arg("ms");
   if (v!="") {
     if (v=="ons") encoders.syncToOnStep();
     if (v=="enc") encoders.syncFromOnStep();
+#ifdef ENC_HAS_ABSOLUTE
+    if (v=="zro") encoders.zeroFromOnStep();
+#endif
   }
 
   // Autosync
@@ -420,10 +438,8 @@ void processEncodersGet() {
   if (v!="") {
     int i;
     if ( (atoi2((char*)v.c_str(),&i)) && ((i>=0) && (i<=9999))) { 
-      Axis1EncDiffLimit=i;
-#ifndef EEPROM_DISABLED
-      EEPROM_writeLong(600,Axis1EncDiffLimit);
-#endif
+      Axis1EncDiffTo=i;
+      nv.writeLong(EE_ENC_A1_DIFF_TO,Axis1EncDiffTo);
       EEwrite=true;
     }
   }
@@ -431,10 +447,8 @@ void processEncodersGet() {
   if (v!="") {
     int i;
     if ( (atoi2((char*)v.c_str(),&i)) && ((i>=0) && (i<=9999))) { 
-      Axis2EncDiffLimit=i;
-#ifndef EEPROM_DISABLED
-      EEPROM_writeLong(604,Axis2EncDiffLimit);
-#endif
+      Axis2EncDiffTo=i;
+      nv.writeLong(EE_ENC_A2_DIFF_TO,Axis2EncDiffTo);
       EEwrite=true;
     }
   }
@@ -453,9 +467,7 @@ void processEncodersGet() {
     int i;
     if ( (atoi2((char*)v.c_str(),&i)) && ((i>=1) && (i<=999))) { 
       Axis1EncStaSamples=i;
-#ifndef EEPROM_DISABLED
-      EEPROM_writeLong(608,Axis1EncStaSamples);
-#endif
+      nv.writeLong(EE_ENC_RC_STA,Axis1EncStaSamples);
       EEwrite=true;
     }
   }
@@ -464,9 +476,7 @@ void processEncodersGet() {
     int i;
     if ( (atoi2((char*)v.c_str(),&i)) && ((i>=1) && (i<=999))) { 
       Axis1EncLtaSamples=i;
-#ifndef EEPROM_DISABLED
-      EEPROM_writeLong(612,Axis1EncLtaSamples);
-#endif
+      nv.writeLong(EE_ENC_RC_LTA,Axis1EncLtaSamples);
       EEwrite=true;
     }
   }
@@ -477,9 +487,7 @@ void processEncodersGet() {
     int i;
     if ( (atoi2((char*)v.c_str(),&i)) && ((i>=50) && (i<=5000))) { 
       Axis1EncProp=i;
-#ifndef EEPROM_DISABLED
-      EEPROM_writeLong(632,Axis1EncProp);
-#endif
+      nv.writeLong(EE_ENC_RC_PROP,Axis1EncProp);
       EEwrite=true;
     }
   }
@@ -490,9 +498,7 @@ void processEncodersGet() {
     int i;
     if ( (atoi2((char*)v.c_str(),&i)) && ((i>=25) && (i<=1000))) { 
       Axis1EncMinGuide=i;
-#ifndef EEPROM_DISABLED
-      EEPROM_writeLong(636,Axis1EncMinGuide);
-#endif
+      nv.writeLong(EE_ENC_MIN_GUIDE,Axis1EncMinGuide);
       EEwrite=true;
     }
   }
@@ -504,9 +510,7 @@ void processEncodersGet() {
     l=strtol(v.c_str(),NULL,10);
     if ((l>=-99999) && (l<=99999)) {
       axis1EncRateComp=(float)l/1000000.0;
-#ifndef EEPROM_DISABLED
-      EEPROM_writeLong(616,l);
-#endif
+      nv.writeLong(EE_ENC_RC_RCOMP,l);
       EEwrite=true;
     }
   }
@@ -518,9 +522,7 @@ void processEncodersGet() {
     int i;
     if ( (atoi2((char*)v.c_str(),&i)) && ((i>=0) && (i<=255))) { 
       Axis1EncIntPolPhase=i;
-#ifndef EEPROM_DISABLED
-      EEPROM_writeLong(624,i);
-#endif
+      nv.writeLong(EE_ENC_RC_INTP_P,i);
       EEwrite=true;
     }
   }
@@ -529,9 +531,7 @@ void processEncodersGet() {
     int i;
     if ( (atoi2((char*)v.c_str(),&i)) && ((i>=0) && (i<=29000))) { 
       Axis1EncIntPolMag=i;
-#ifndef EEPROM_DISABLED
-      EEPROM_writeLong(628,i);
-#endif
+      nv.writeLong(EE_ENC_RC_INTP_M,i);
       EEwrite=true;
     }
   }
@@ -546,9 +546,7 @@ void processEncodersGet() {
 
 #endif // AXIS1_ENC_RATE_CONTROL == ON
 
-#ifndef EEPROM_COMMIT_DISABLED
-  if (EEwrite) EEPROM.commit();
-#endif
+  nv.commit();
 }
 
 #endif

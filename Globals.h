@@ -72,12 +72,12 @@ bool haltAxis2                       = false;
 bool faultAxis2                      = false;
 
 #if AXIS1_DRIVER_MODEL == TMC_SPI
-  #define AXIS1_DRIVER_SWITCH_RATE 150*16L
+  #define AXIS1_DRIVER_SWITCH_RATE timerRateBacklashAxis1
 #else
   #define AXIS1_DRIVER_SWITCH_RATE 80*16L
 #endif
 #if AXIS2_DRIVER_MODEL == TMC_SPI
-  #define AXIS2_DRIVER_SWITCH_RATE 150*16L
+  #define AXIS2_DRIVER_SWITCH_RATE timerRateBacklashAxis2
 #else
   #define AXIS2_DRIVER_SWITCH_RATE 80*16L
 #endif
@@ -170,12 +170,17 @@ double longitude                        = 0.0;
 // Coordinates ---------------------------------------------------------------------------------------------------------------------
 #ifndef TELESCOPE_COORDINATES
   #define TELESCOPE_COORDINATES TOPOCENTRIC
+#endif 
+
+#ifndef AXIS1_HOME_DEFAULT
+  #if MOUNT_TYPE == GEM
+    #define AXIS1_HOME_DEFAULT 90.0 
+  #else
+    #define AXIS1_HOME_DEFAULT 0.0 
+  #endif
 #endif
-#if MOUNT_TYPE == GEM
-  double homePositionAxis1              = 90.0;
-#else
-  double homePositionAxis1              = 0.0;
-#endif
+double homePositionAxis1                = AXIS1_HOME_DEFAULT;
+
 volatile long posAxis1                  = 0;                 // hour angle position in steps
 volatile int blAxis1                    = 0;                 // backlash position in steps
 volatile int backlashAxis1              = 0;                 // total backlash in steps
@@ -187,10 +192,18 @@ double newTargetAzm                     = 0.0;               // holds the altitu
 fixed_t origTargetAxis1;
 double indexAxis1                       = 0;                 // index offset corrections, simple align/sync
 long   indexAxis1Steps                  = 0;
-volatile long stepAxis1=1;
+volatile int stepAxis1=1;
 fixed_t fstepAxis1;                                          // tracking and PEC, fractional steps
 
-double homePositionAxis2                = 0.0;
+#ifndef AXIS2_HOME_DEFAULT
+  #if MOUNT_TYPE == ALTAZM
+    #define AXIS2_HOME_DEFAULT 0.0
+  #else
+    #define AXIS2_HOME_DEFAULT 90.0                          // always positive, sign is automatically adjusted for hemisphere
+  #endif
+#endif
+double homePositionAxis2                = AXIS2_HOME_DEFAULT;
+
 volatile long posAxis2                  = 0;                 // declination position in steps
 volatile int blAxis2                    = 0;                 // backlash position in steps
 volatile int backlashAxis2              = 0;                 // total backlash in steps
@@ -202,7 +215,7 @@ double newTargetAlt                     = 0.0;               // holds the altitu
 fixed_t origTargetAxis2;
 double indexAxis2                       = 0;                 // index offset corrections, simple align/sync
 long   indexAxis2Steps                  = 0;
-volatile long stepAxis2=1;
+volatile int stepAxis2=1;
 fixed_t fstepAxis2;                                          // tracking and PEC, fractional steps
 
 double currentAlt                       = 45.0;              // the current altitude
@@ -294,7 +307,7 @@ byte abortTrackingState                 = TrackingNone;
 volatile byte lastTrackingState         = TrackingNone;
 int trackingSyncSeconds                 = 0;
 byte abortGoto                          = 0;
-volatile bool safetyLimitsOn         = true;
+volatile bool safetyLimitsOn         = false;
 bool axis1Enabled                    = false;
 bool axis2Enabled                    = false;
 bool syncToEncodersOnly              = false;
@@ -452,13 +465,13 @@ typedef struct Features {
 } features;
 
 features feature[8] = {
-  {FEATURE1_NAME,FEATURE1_PURPOSE,FEATURE1_TEMP,FEATURE1_PIN,0,NULL,NULL},
-  {FEATURE2_NAME,FEATURE2_PURPOSE,FEATURE2_TEMP,FEATURE2_PIN,0,NULL,NULL},
-  {FEATURE3_NAME,FEATURE3_PURPOSE,FEATURE3_TEMP,FEATURE3_PIN,0,NULL,NULL},
-  {FEATURE4_NAME,FEATURE4_PURPOSE,FEATURE4_TEMP,FEATURE4_PIN,0,NULL,NULL},
-  {FEATURE5_NAME,FEATURE5_PURPOSE,FEATURE5_TEMP,FEATURE5_PIN,0,NULL,NULL},
-  {FEATURE6_NAME,FEATURE6_PURPOSE,FEATURE6_TEMP,FEATURE6_PIN,0,NULL,NULL},
-  {FEATURE7_NAME,FEATURE7_PURPOSE,FEATURE7_TEMP,FEATURE7_PIN,0,NULL,NULL},
-  {FEATURE8_NAME,FEATURE8_PURPOSE,FEATURE8_TEMP,FEATURE8_PIN,0,NULL,NULL}
+  {FEATURE1_NAME,FEATURE1_PURPOSE,FEATURE1_TEMP,FEATURE1_PIN,FEATURE1_DEFAULT_VALUE,NULL,NULL},
+  {FEATURE2_NAME,FEATURE2_PURPOSE,FEATURE2_TEMP,FEATURE2_PIN,FEATURE2_DEFAULT_VALUE,NULL,NULL},
+  {FEATURE3_NAME,FEATURE3_PURPOSE,FEATURE3_TEMP,FEATURE3_PIN,FEATURE3_DEFAULT_VALUE,NULL,NULL},
+  {FEATURE4_NAME,FEATURE4_PURPOSE,FEATURE4_TEMP,FEATURE4_PIN,FEATURE4_DEFAULT_VALUE,NULL,NULL},
+  {FEATURE5_NAME,FEATURE5_PURPOSE,FEATURE5_TEMP,FEATURE5_PIN,FEATURE5_DEFAULT_VALUE,NULL,NULL},
+  {FEATURE6_NAME,FEATURE6_PURPOSE,FEATURE6_TEMP,FEATURE6_PIN,FEATURE6_DEFAULT_VALUE,NULL,NULL},
+  {FEATURE7_NAME,FEATURE7_PURPOSE,FEATURE7_TEMP,FEATURE7_PIN,FEATURE7_DEFAULT_VALUE,NULL,NULL},
+  {FEATURE8_NAME,FEATURE8_PURPOSE,FEATURE8_TEMP,FEATURE8_PIN,FEATURE8_DEFAULT_VALUE,NULL,NULL}
 };
 #endif

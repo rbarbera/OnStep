@@ -329,10 +329,9 @@ void setLatitude(double Lat) {
 
   // the polar home position
 #if MOUNT_TYPE == ALTAZM
-  homePositionAxis1=0.0;
-  homePositionAxis2=0.0;
+  homePositionAxis2=AXIS2_HOME_DEFAULT;
 #else
-  if (latitude < 0) homePositionAxis2=-90.0; else homePositionAxis2=90.0;
+  if (latitude < 0) homePositionAxis2=-AXIS2_HOME_DEFAULT; else homePositionAxis2=AXIS2_HOME_DEFAULT;
 #endif
 }
 
@@ -368,6 +367,8 @@ void horToEqu(double Alt, double Azm, double *HA, double *Dec) {
 
 // returns the amount of refraction (in arcminutes) at the given true altitude (degrees), pressure (millibars), and temperature (celsius)
 double trueRefrac(double Alt, double Pressure=1010.0, double Temperature=10.0) {
+  if (isnan(Pressure)) Pressure=1010.0;
+  if (isnan(Temperature)) Temperature=10.0;
   double TPC=(Pressure/1010.0) * (283.0/(273.0+Temperature));
   double r=( ( 1.02*cot( (Alt+(10.3/(Alt+5.11)))/Rad ) ) ) * TPC;  if (r < 0.0) r=0.0;
   return r;
@@ -375,6 +376,8 @@ double trueRefrac(double Alt, double Pressure=1010.0, double Temperature=10.0) {
 
 // returns the amount of refraction (in arcminutes) at the given apparent altitude (degrees), pressure (millibars), and temperature (celsius)
 double apparentRefrac(double Alt, double Pressure=1010.0, double Temperature=10.0) {
+  if (isnan(Pressure)) Pressure=1010.0;
+  if (isnan(Temperature)) Temperature=10.0;
   double r=trueRefrac(Alt,Pressure,Temperature);
   r=trueRefrac(Alt-(r/60.0),Pressure,Temperature);
   return r;

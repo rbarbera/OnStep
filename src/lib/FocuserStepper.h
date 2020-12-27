@@ -20,12 +20,12 @@ class focuserStepper : public focuser {
       setMin(min*spm);
       setMax(max*spm);
       
-      if (stepPin != -1) pinMode(stepPin,OUTPUT);
-      if (dirPin != -1) pinMode(dirPin,OUTPUT);
+      pinMode(stepPin,OUTPUT);
+      pinMode(dirPin,OUTPUT);
 
       // get the temperature compensated focusing settings
       float coef=nv.readFloat(nvAddress+EE_tcfCoef);
-      if (fabs(coef) >= 1000.0) { coef=0; generalError=ERR_NV_INIT; DLF("ERR, foc.init(): bad NV TcfCoef >= 1000 um/deg. C (set to 0.0)"); }
+      if (fabs(coef) > 999.0) { coef=0; generalError=ERR_NV_INIT; DLF("ERR, foc.init(): bad NV TcfCoef > 999.0 um/deg. C (set to 0.0)"); }
       setTcfCoef(coef);
 
       int deadband=nv.readInt(nvAddress+EE_tcfDeadband);
@@ -34,8 +34,8 @@ class focuserStepper : public focuser {
       setTcfDeadband(deadband);
 
       tcf_t0=nv.readFloat(nvAddress+EE_tcfT0);
-      if (tcf_t0 < -100.0) { tcf_t0=10.0; generalError=ERR_NV_INIT; DLF("ERR, foc.init(): bad NV TcfT0 < -100 deg. C (set to 10.0)"); }
-      if (tcf_t0 >  150.0) { tcf_t0=10.0; generalError=ERR_NV_INIT; DLF("ERR, foc.init(): bad NV TcfT0 >  150 deg. C (set to 10.0)"); }
+      if (tcf_t0 < -100.0) { tcf_t0=10.0; generalError=ERR_NV_INIT; DLF("ERR, foc.init(): bad NV TcfT0 < -100.0 deg. C (set to 10.0)"); }
+      if (tcf_t0 >  150.0) { tcf_t0=10.0; generalError=ERR_NV_INIT; DLF("ERR, foc.init(): bad NV TcfT0 >  150.0 deg. C (set to 10.0)"); }
 
       int tcfEn=nv.read(nvAddress+EE_tcfEn);
       if (tcfEn != true && tcfEn != false) { tcfEn=false; generalError=ERR_NV_INIT; DLF("ERR, foc.init(): bad NV tcfEn (set to false)"); }
@@ -90,6 +90,10 @@ class focuserStepper : public focuser {
       return true;
     }
 
+    double getTcfT0() {
+      return tcf_t0;
+    }
+
     // set backlash, in steps
     bool setBacklash(int b) { if (b < 0 || b > backlashMax) return false; backlash = b; nv.writeInt(nvAddress+EE_focBacklash,backlash); return true; }
 
@@ -103,14 +107,15 @@ class focuserStepper : public focuser {
     void setDisableState(bool disableState) {
       this->disableState=disableState;
       if (disableState == LOW) enableState=HIGH; else enableState=LOW;
-      if (enPin != -1) { pinMode(enPin,OUTPUT); enableDriver(); currentlyDisabled=false; }
+      if (enPin != OFF && enPin != SHARED) { pinMode(enPin,OUTPUT); enableDriver(); currentlyDisabled=false; }
     }
 
     // allows enabling/disabling stepper driver
-    void powerDownActive(bool active) {
-      if (enPin == -1) { pda=false; return; }
+    void powerDownActive(bool active, bool startupOnly) {
+      if (enPin == OFF || enPin == SHARED || startupOnly) active=false;
       pda=active;
-      if (pda) { pinMode(enPin,OUTPUT); disableDriver(); currentlyDisabled=true; }
+      this->startupOnly=startupOnly;
+      if (pda || startupOnly) { pinMode(enPin,OUTPUT); disableDriver(); currentlyDisabled=true; }
     }
 
     // set movement rate in microns/second, from minRate to 1000
@@ -122,11 +127,15 @@ class focuserStepper : public focuser {
 
     // move in
     void startMoveIn() {
+      if (!movementAllowed()) return;
+      if (startupOnly && currentlyDisabled) { enableDriver(); currentlyDisabled=false; }
       delta.fixed=doubleToFixed(+moveRate/100.0);   // in steps per centi-second
     }
 
     // move out
     void startMoveOut() {
+      if (!movementAllowed()) return;
+      if (startupOnly && currentlyDisabled) { enableDriver(); currentlyDisabled=false; }
       delta.fixed=doubleToFixed(-moveRate/100.0);   // in steps per centi-second
     }
 
@@ -134,28 +143,35 @@ class focuserStepper : public focuser {
     bool moving() { if (delta.fixed != 0 || spos != (long)target.part.m) return true; else return false; }
 
     // sets target position in steps
-    void setTarget(long pos) {
+    bool setTarget(long pos) {
+      if (!movementAllowed()) return false;
+      if (startupOnly && currentlyDisabled) { enableDriver(); currentlyDisabled=false; }
       target.part.m=pos; target.part.f=0;
       if ((long)target.part.m < smin) target.part.m=smin; if ((long)target.part.m > smax) target.part.m=smax;
+      return true;
     }
 
     // sets target relative position in steps
     void relativeTarget(long pos) {
+      if (!movementAllowed()) return;
+      if (startupOnly && currentlyDisabled) { enableDriver(); currentlyDisabled=false; }
       target.part.m+=pos; target.part.f=0;
       if ((long)target.part.m < smin) target.part.m=smin; if ((long)target.part.m > smax) target.part.m=smax;
     }
     
     // do automatic movement
     void poll() {
+      if (!movementAllowed()) return;
       target.fixed+=delta.fixed;
       // stop at limits
       if (((long)target.part.m < smin) || ((long)target.part.m > smax)) delta.fixed=0;
     }
 
     void follow(bool mountSlewing) {
+      if (!movementAllowed()) return;
 
       // if enabled and the timeout has elapsed, disable the stepper driver
-      if (pda && !currentlyDisabled && ((long)(micros()-lastPhysicalMove) > 10000000L)) { disableDriver(); currentlyDisabled=true; }
+      if (pda && !currentlyDisabled && ((long)(micros()-lastPhysicalMove) > FOCUSER_POWER_DOWN_DELAY*1000L)) { disableDriver(); currentlyDisabled=true; }
 
       unsigned long microsNow=micros();
       if ((long)(microsNow-nextPhysicalMove) > 0) {
@@ -192,12 +208,14 @@ class focuserStepper : public focuser {
   private:
 
     void enableDriver() {
-      if (enPin == -1) return;
+      if (enPin == OFF || enPin == SHARED) return;
       digitalWrite(enPin,enableState); delayMicroseconds(20);
     }
 
     void disableDriver() {
-      if (enPin == -1) return;
+      if (enPin == OFF || enPin == SHARED) return;
       digitalWrite(enPin,disableState); delayMicroseconds(20);
     }
+
+    bool startupOnly = false;
 };

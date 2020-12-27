@@ -2,10 +2,36 @@
 // Functions for initializing pins, variables, and timers on startup
 
 void initPre() {
-  // initialize and disable the main axes stepper drivers
-  pinMode(14,OUTPUT); digitalWrite(14,AXIS1_DRIVER_ENABLE);
-  if (Axis1_EN != -1) { pinMode(Axis1_EN,OUTPUT); digitalWrite(Axis1_EN,AXIS1_DRIVER_DISABLE); }
-  if (Axis1_EN != -1) { pinMode(Axis2_EN,OUTPUT); digitalWrite(Axis1_EN,AXIS1_DRIVER_DISABLE); }
+  // disable the main axes stepper drivers
+  if (Axis1_EN != OFF) { pinMode(Axis1_EN,OUTPUT); digitalWrite(Axis1_EN,AXIS1_DRIVER_DISABLE); }
+  if (Axis2_EN != OFF  && Axis2_EN != SHARED) { pinMode(Axis2_EN,OUTPUT); digitalWrite(Axis2_EN,AXIS2_DRIVER_DISABLE); }
+
+  // disable DS3234 CS pin
+#if TIME_LOCATION_SOURCE == DS3234
+  pinMode(DS3234_CS_PIN,OUTPUT); digitalWrite(DS3234_CS_PIN,HIGH);
+#endif
+
+  // disable weather CS pin
+#if WEATHER == BMP280_SPI || WEATHER == BME280_SPI
+  pinMode(BME280_CS_PIN,OUTPUT); digitalWrite(BME280_CS_PIN,HIGH);
+#endif
+
+  // disable all stepper driver CS pins at startup
+#if AXIS1_DRIVER_MODEL == TMC_SPI
+  pinMode(Axis1_M2,OUTPUT); digitalWrite(Axis1_M2,HIGH);
+#endif
+#if AXIS2_DRIVER_MODEL == TMC_SPI
+  pinMode(Axis2_M2,OUTPUT); digitalWrite(Axis2_M2,HIGH);
+#endif
+#if AXIS3_DRIVER_MODEL == TMC_SPI
+  pinMode(Axis3_M2,OUTPUT); digitalWrite(Axis3_M2,HIGH);
+#endif
+#if AXIS4_DRIVER_MODEL == TMC_SPI
+  pinMode(Axis4_M2,OUTPUT); digitalWrite(Axis4_M2,HIGH);
+#endif
+#if AXIS5_DRIVER_MODEL == TMC_SPI
+  pinMode(Axis5_M2,OUTPUT); digitalWrite(Axis5_M2,HIGH);
+#endif
 }
 
 void initPins() {
@@ -23,15 +49,6 @@ void initPins() {
   // Pull the Axis1/2 RST Pin HIGH on the MaxESP2
 #if PINMAP == MaxESP2
   pinMode(Axis1_M3,INPUT_PULLUP);
-#endif
-
-  // ESP-01 (ESP8266) firmware flashing control
-#if SERIAL_B_ESP_FLASHING == ON
-  pinMode(ESP8266Gpio0Pin,OUTPUT);                // ESP8266 GPIO0
-  digitalWrite(ESP8266Gpio0Pin,HIGH); delay(20);  // Run mode
-  pinMode(ESP8266RstPin,OUTPUT);                  // ESP8266 RST
-  digitalWrite(ESP8266RstPin,LOW);  delay(200);   // Reset, if LOW
-  digitalWrite(ESP8266RstPin,HIGH);               // Reset, inactive HIGH
 #endif
 
   // light status LED (provides GND)
@@ -263,14 +280,22 @@ void initWriteNvValues() {
     // clear the pointing model
     saveAlignModel();
 
+    // sit here and wait until the entire nv contents are written before writing the key
+    VLF("MSG: Init NV waiting for cache");
+#ifndef ESP32
+    while (!nv.committed()) nv.poll();
+#endif
+
     // finally, stop the init from happening again
     nv.writeLong(EE_autoInitKey,NV_INIT_KEY);
+
+    VLF("MSG: Init NV key written");
   }
   
   // bit 0 = settings at compile (0) or run time (1), bits 1 to 5 = (1) to reset axis n on next boot
   int axisReset=nv.read(EE_settingsRuntime);
   if (!(axisReset&0b0000001)) axisReset|=0b0111110; // force reset of all axis settings
-  if   (axisReset&0b0000010) { nv.writeBytes(EE_settingsAxis1,(byte*)&axis1Settings,sizeof(axis1Settings)); VLF("MSG: Init NV Axis1 defaults"); }
+  if   (axisReset&0b0000010) { nv.writeBytes(EE_settingsAxis1,(byte*)&axis1Settings,sizeof(axis1Settings)); nv.writeLong(EE_stepsPerWormRotAxis1,AXIS1_STEPS_PER_WORMROT); VLF("MSG: Init NV Axis1 defaults"); }
   if   (axisReset&0b0000100) { nv.writeBytes(EE_settingsAxis2,(byte*)&axis2Settings,sizeof(axis2Settings)); VLF("MSG: Init NV Axis2 defaults"); }
   if   (axisReset&0b0001000) { nv.writeBytes(EE_settingsAxis3,(byte*)&axis3Settings,sizeof(axis3Settings)); VLF("MSG: Init NV Axis3 defaults"); }
   if   (axisReset&0b0010000) { nv.writeBytes(EE_settingsAxis4,(byte*)&axis4Settings,sizeof(axis4Settings)); VLF("MSG: Init NV Axis4 defaults"); }
@@ -350,7 +375,7 @@ void initReadNvValues() {
   // get date and time from EEPROM, start keeping time
   timeZone=nv.read(EE_sites+currentSite*25+8)-128;
   timeZone=decodeTimeZone(timeZone);
-  if (timeZone < -12 || timeZone > 14) { timeZone=0.0; generalError=ERR_NV_INIT; DLF("ERR, initReadNvValues(): bad NV timeZone"); }
+  if (timeZone < -14 || timeZone > 12) { timeZone=0.0; generalError=ERR_NV_INIT; DLF("ERR, initReadNvValues(): bad NV timeZone"); }
   nv.readString(EE_sites+currentSite*25+9,siteName);
 
   JD=nv.readFloat(EE_JD);
@@ -368,7 +393,7 @@ void initReadNvValues() {
   // get the degrees past meridian east/west
 #if MOUNT_TYPE == GEM
   int i=round(nv.read(EE_dpmE)-128);
-  if (i > 60) i=((i-90)*2)+60; else if (i < -60) i=((i+90)*2)-60;
+  if (i > 60) i=((i-60)*2)+60; else if (i < -60) i=((i+60)*2)-60;
   degreesPastMeridianE=i;
   if (degreesPastMeridianE < -180 || degreesPastMeridianE > 180) { degreesPastMeridianE=0.0; generalError=ERR_NV_INIT; DLF("ERR, initReadNvValues(): bad NV degreesPastMeridianE"); }
 
@@ -394,14 +419,11 @@ void initReadNvValues() {
   if (backlashAxis2 < 0 ) { backlashAxis2=0; generalError=ERR_NV_INIT; DLF("ERR, initReadNvValues(): bad NV backlashAxis2"); }
   
   // setup PEC and get data
-  stepsPerWormRotationAxis1=AXIS1_STEPS_PER_WORMROT*(axis1Settings.stepsPerMeasure/AXIS1_STEPS_PER_DEGREE);
+  if (AXIS1_PEC != ON) nv.writeLong(EE_stepsPerWormRotAxis1,0);
+  stepsPerWormRotationAxis1=nv.readLong(EE_stepsPerWormRotAxis1);
   secondsPerWormRotationAxis1=stepsPerWormRotationAxis1/stepsPerSecondAxis1;
 
-#if AXIS1_PEC == ON
   pecBufferSize=ceil(stepsPerWormRotationAxis1/(axis1Settings.stepsPerMeasure/240.0));
-#else
-  pecBufferSize=0;
-#endif
   if (pecBufferSize != 0) {
     if (pecBufferSize < 61) { pecBufferSize=0; generalError=ERR_NV_INIT; DLF("ERR, initReadNvValues(): invalid pecBufferSize, PEC disabled"); }
     if (200+pecBufferSize >= E2END-200) { pecBufferSize=0; generalError=ERR_NV_INIT; DLF("ERR, initReadNvValues(): pecBufferSize exceeds available NV, PEC disabled"); }

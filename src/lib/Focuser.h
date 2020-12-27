@@ -11,6 +11,9 @@
 #else
   #define FOCUSER_WRITE_DELAY 1000L*60L*5L   // 5 minutes
 #endif
+#ifndef FOCUSER_POWER_DOWN_DELAY
+  #define FOCUSER_POWER_DOWN_DELAY 10L*1000L // 10 seconds to power off, when the power down setting is active
+#endif
 
 class focuser {
   public:
@@ -33,20 +36,23 @@ class focuser {
     bool getTcfEnable() { return tcf; }
     long getTcfSteps() {
       if (tcf) {
-        float tc = -round((tcf_coef * (ambient.getTelescopeTemperature() - tcf_t0)) * spm);
+        float tt = ambient.getTelescopeTemperature();
+        if (isnan(tt)) { tcf=false; return 0; }
+        float tc = -round((tcf_coef * (tt - tcf_t0)) * spm);
         return lround(tc/(float)tcf_deadband)*(long)tcf_deadband;
       } else return 0;
     }
+    virtual double getTcfT0() { return 0; }
 
     // get step size in microns
     virtual double getStepsPerMicro() { return spm; }
 
     // minimum position in steps
-    void setMin(long min) { smin=min; if (smin < 0 || smin > 500*1000*10) smin=0; if (smin > smax) smin=smax; backlashMax=(smax-smin)/10; if (backlashMax > 32767) backlashMax=32767; }
+    void setMin(long min) { smin=min; if (smin < 0 || smin > 500L*1000L*10L) smin=0; if (smin > smax) smin=smax; backlashMax=(smax-smin)/10; if (backlashMax > 32767) backlashMax=32767; }
     long getMin() { return smin; }
 
     // maximum position in steps
-    void setMax(long max) { smax=max; if (smax < 0 || smax > 500*1000*10) smax=0; if (smax < smin) smax=smin; backlashMax=(smax-smin)/10; if (backlashMax > 32767) backlashMax=32767; }
+    void setMax(long max) { smax=max; if (smax < 0 || smax > 500*1000L*10L) smax=0; if (smax < smin) smax=smin; backlashMax=(smax-smin)/10; if (backlashMax > 32767) backlashMax=32767; }
     long getMax() { return smax; }
 
     // backlash, in steps
@@ -72,7 +78,7 @@ class focuser {
     virtual void startMoveOut() { }
 
     // check if moving
-    bool moving() { return inMotion; }
+    virtual bool moving() { return inMotion; }
 
     // stop move
     void stopMove() { delta.fixed=0; }
@@ -89,7 +95,7 @@ class focuser {
     }
 
     // sets target position in steps
-    virtual void setTarget(long pos) { }
+    virtual bool setTarget(long pos) { return false; }
 
     // sets target relative position in steps
     virtual void relativeTarget(long pos) { }
@@ -103,6 +109,9 @@ class focuser {
     void savePosition() { writeTarget(); }
   
   protected:
+    bool movementAllowed() {
+      if (enPin == SHARED && !axis1Enabled) return false; else return true;
+    }
     void writeTarget() {
       nv.writeLong(nvAddress+EE_focSpos,spos);
       nv.writeLong(nvAddress+EE_focTarget,(long)target.part.m);

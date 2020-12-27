@@ -74,6 +74,9 @@ void processCommands() {
   #ifdef HAL_SERIAL_C_ENABLED
     if (SerialC.transmit()) return;
   #endif
+  #ifdef HAL_SERIAL_D_ENABLED
+    if (SerialD.transmit()) return;
+  #endif
 #endif
 
     // if a command is ready, process it
@@ -282,64 +285,25 @@ void processCommands() {
           boolReply=false;
         } else
 #endif
+// :ENVRESET# Wipe flash.  OnStep must be at home and tracking turned off for this command to work.
+        if (command[1] == 'N' && parameter[0] == 'V' && parameter[1] == 'R' && parameter[2] == 'E' && parameter[3] == 'S' && parameter[4] == 'E' && parameter[5] == 'T' && parameter[6] == 0) {
+          if (atHome || parkStatus == Parked) {
+            nv.writeLong(EE_autoInitKey,0);
+            strcpy(reply,"NV will be wiped on next boot.");
+            boolReply=false;
+          } else commandError=CE_NOT_PARKED_OR_AT_HOME; } else
 #if SERIAL_B_ESP_FLASHING == ON
 // :ESPFLASH# ESP8266 device flash mode.  OnStep must be at home and tracking turned off for this command to work.
 //            Return: 1 on completion (after up to one minute from start of command.)
         if (command[1] == 'S' && parameter[0] == 'P' && parameter[1] == 'F' && parameter[2] == 'L' && parameter[3] == 'A' && parameter[4] == 'S' && parameter[5] == 'H' && parameter[6] == 0) {
           if (atHome || parkStatus == Parked) {
-            // initialize both serial ports
             SerialA.println("The ESP8266 will now be placed in flash upload mode (at 115200 Baud.)");
             SerialA.println("Arduino's 'Tools -> Upload Speed' should be set to 115200 Baud.");
             SerialA.println("Waiting for data, you have one minute to start the upload.");
             delay(1000);
-
-  #ifdef SERIAL_B_RX
-            SerialB.begin(115200, SERIAL_8N1, SERIAL_B_RX, SERIAL_B_TX);
-  #else
-            SerialB.begin(115200);
-  #endif
-            SerialA.begin(115200);
+            fa.go(false); // flash the addon
+            SerialA.println("ESP8266 reset and in run mode, resuming OnStep operation...");
             delay(1000);
-
-            digitalWrite(ESP8266Gpio0Pin,LOW); delay(20);  // Pgm mode LOW
-            digitalWrite(ESP8266RstPin,LOW);   delay(20);  // Reset, if LOW
-            digitalWrite(ESP8266RstPin,HIGH);  delay(20);  // Reset, inactive HIGH
-            
-            unsigned long lastRead=millis()+55000; // so we have a total of 1 minute to start the upload
-            while (true) {
-              // read from port 1, send to port 0:
-              if (SerialB.available()) {
-                int inByte = SerialB.read(); delayMicroseconds(5);
-                SerialA.write(inByte); delayMicroseconds(5);
-              }
-              // read from port 0, send to port 1:
-              if (SerialA.available()) {
-                int inByte = SerialA.read(); delayMicroseconds(5);
-                SerialB.write(inByte); delayMicroseconds(5);
-                if (millis() > lastRead) lastRead=millis();
-              }
-              yield();
-              if ((long)(millis()-lastRead) > 5000) break; // wait 5 seconds w/no traffic before resuming normal operation
-            }
-
-            SerialA.print("Resetting ESP8266, ");
-            delay(500);
-
-            digitalWrite(ESP8266Gpio0Pin,HIGH); delay(20); // Run mode HIGH
-            digitalWrite(ESP8266RstPin,LOW);  delay(20);   // Reset, if LOW
-            digitalWrite(ESP8266RstPin,HIGH); delay(20);   // Reset, inactive HIGH
-
-            SerialA.println("returning to default Baud rates, and resuming OnStep operation...");
-            delay(500);
-
-  #ifdef SERIAL_B_RX
-            SerialB.begin(SERIAL_B_BAUD_DEFAULT, SERIAL_8N1, SERIAL_B_RX, SERIAL_B_TX);
-  #else
-            SerialB.begin(SERIAL_B_BAUD_DEFAULT);
-  #endif
-            SerialA.begin(SERIAL_A_BAUD_DEFAULT);
-            delay(1000);
-
           } else commandError=CE_NOT_PARKED_OR_AT_HOME;
         } else
 #endif
@@ -388,6 +352,9 @@ void processCommands() {
 #endif
           else commandError=CE_PARAM_RANGE;
         } else
+// :Fa#       Get primary focuser
+//            Returns: 1 if primary focuser is focuser 1, 0 otherwise
+        if (command[1] == 'a') { if (primaryFocuser != 'F') commandError=CE_0; } else
 
 // :FT#       Get status
 //            Returns: M# (for moving) or S# (for stopped)
@@ -404,6 +371,9 @@ void processCommands() {
 //            Returns: n#
         if (toupper(command[1]) == 'M') { sprintf(reply,"%ld",(long)round(foc->getMax()/spm)); boolReply=false; } else
 
+// :Fe#       Get focuser temperature differential
+//            Returns: n# temperature in deg. C
+        if (command[1] == 'e') { if (foc->getTcfEnable()) dtostrf(ambient.getTelescopeTemperature()-foc->getTcfT0(),3,1,reply); else dtostrf(0.0,3,1,reply); boolReply=false; } else
 // :Ft#       Get focuser temperature
 //            Returns: n# temperature in deg. C
         if (command[1] == 't') { dtostrf(ambient.getTelescopeTemperature(),3,1,reply); boolReply=false; } else
@@ -485,7 +455,7 @@ void processCommands() {
 // :FS[n]#    Set focuser target position (in microns or steps)
 //            Return: 0 on failure
 //                    1 on success
-        if (toupper(command[1]) == 'S') { foc->setTarget((double)atol(parameter)*spm); } else
+        if (toupper(command[1]) == 'S') { if (!foc->setTarget((double)atol(parameter)*spm)) commandError=CE_SLEW_ERR_IN_STANDBY; } else
 // :FZ#       Set focuser position as zero
 //            Returns: Nothing
         if (command[1] == 'Z') { foc->setPosition(0); boolReply=false; } else
@@ -745,7 +715,7 @@ void processCommands() {
         if (syncToEncodersOnly)                  reply[i++]='e';                                             // sync to [e]ncoders only
         if (atHome)                              reply[i++]='H';                                             // at [H]ome
         if (ppsSynced)                           reply[i++]='S';                                             // PPS [S]ync
-        if (guideDirAxis1 || guideDirAxis2)      reply[i++]='G';                                             // [G]uide active
+        if (isPulseGuiding())                    reply[i++]='G';                                             // pulse [G]uide active
 #if MOUNT_TYPE != ALTAZM
         if (rateCompensation == RC_REFR_RA)      { reply[i++]='r'; reply[i++]='s'; }                         // [r]efr enabled [s]ingle axis
         if (rateCompensation == RC_REFR_BOTH)    { reply[i++]='r'; }                                         // [r]efr enabled
@@ -795,7 +765,7 @@ void processCommands() {
           !(trackingState == TrackingMoveTo && lastTrackingState == TrackingSidereal)) reply[0]|=0b10000001; // Not tracking
         if (trackingState != TrackingMoveTo && !trackingSyncInProgress())  reply[0]|=0b10000010;             // No goto
         if (ppsSynced)                               reply[0]|=0b10000100;                                   // PPS sync
-        if (guideDirAxis1 || guideDirAxis2)          reply[0]|=0b10001000;                                   // Guide active
+        if (isPulseGuiding())                        reply[0]|=0b10001000;                                   // pulse guide active
 #if MOUNT_TYPE != ALTAZM
         if (rateCompensation == RC_REFR_RA)          reply[0]|=0b11010000;                                   // Refr enabled Single axis
         if (rateCompensation == RC_REFR_BOTH)        reply[0]|=0b10010000;                                   // Refr enabled
@@ -1029,7 +999,7 @@ void processCommands() {
               case '4': sprintf(reply,"%ld",(long)round(axis1Settings.stepsPerMeasure)); boolReply=false; break;
               case '5': sprintf(reply,"%ld",(long)round(axis2Settings.stepsPerMeasure)); boolReply=false; break;
               case '6': dtostrf(stepsPerSecondAxis1,3,6,reply); boolReply=false; break;
-              case '7': sprintf(reply,"%ld",stepsPerWormRotationAxis1); boolReply=false; break;
+              case '7': sprintf(reply,"%ld",nv.readLong(EE_stepsPerWormRotAxis1)); boolReply=false; break;
               case '8': sprintf(reply,"%ld",(long)round(pecBufferSize)); boolReply=false; break;
 #if MOUNT_TYPE == GEM
               case '9': sprintf(reply,"%ld",(long)round(degreesPastMeridianE*4.0)); boolReply=false; break;    // minutes past meridianE
@@ -1332,17 +1302,17 @@ void processCommands() {
           if (i >= 0 && i <= 16399) {
             if ((parameter[0] == 'e' || parameter[0] == 'w') && guideDirAxis1 == 0) {
 #if SEPARATE_PULSE_GUIDE_RATE == ON
-              commandError=startGuideAxis1(parameter[0],currentPulseGuideRate,i);
+              commandError=startGuideAxis1(parameter[0],currentPulseGuideRate,i,true);
 #else
-              commandError=startGuideAxis1(parameter[0],currentGuideRate,i);
+              commandError=startGuideAxis1(parameter[0],currentGuideRate,i,true);
 #endif
               if (command[1] == 'g') boolReply=false;
             } else
             if ((parameter[0] == 'n' || parameter[0] == 's') && guideDirAxis2 == 0) { 
 #if SEPARATE_PULSE_GUIDE_RATE == ON
-              commandError=startGuideAxis2(parameter[0],currentPulseGuideRate,i);
+              commandError=startGuideAxis2(parameter[0],currentPulseGuideRate,i,true);
 #else
-              commandError=startGuideAxis2(parameter[0],currentGuideRate,i);
+              commandError=startGuideAxis2(parameter[0],currentGuideRate,i,true);
 #endif
               if (command[1] == 'g') boolReply=false;
             } else commandError=CE_CMD_UNKNOWN;
@@ -1352,13 +1322,13 @@ void processCommands() {
 // :Me# :Mw#  Move Telescope East or West at current guide rate
 //            Returns: Nothing
       if ((command[1] == 'e' || command[1] == 'w') && parameter[0] == 0) {
-        commandError=startGuideAxis1(command[1],currentGuideRate,GUIDE_TIME_LIMIT*1000);
+        commandError=startGuideAxis1(command[1],currentGuideRate,GUIDE_TIME_LIMIT*1000,false);
         boolReply=false;
       } else
 // :Mn# :Ms#  Move Telescope North or South at current guide rate
 //            Returns: Nothing
       if ((command[1] == 'n' || command[1] == 's') && parameter[0] == 0) {
-        commandError=startGuideAxis2(command[1],currentGuideRate,GUIDE_TIME_LIMIT*1000);
+        commandError=startGuideAxis2(command[1],currentGuideRate,GUIDE_TIME_LIMIT*1000,false);
         boolReply=false;
       } else
 // :Mp#  Move Telescope for sPiral search at current guide rate
@@ -1559,14 +1529,26 @@ void processCommands() {
 //            Returns: Nothing
       if (command[1] == 'R' && parameter[0] == 0) { rot.reverseDR(); boolReply=false; } else
 #endif
-// :rB#       Get rotator backlash amount in degrees
-//            Return: DDD*MM'SS#
-        if (command[1] == 'B' && parameter[0] == 0) { f1=rot.getBacklash(); doubleToDms(reply,&f1,true,false,PM_HIGH); boolReply=false; } else
-// :rB[DDD*MM'SS]#
-//            Set rotator backlash amount in degrees
+// :rT#       Get status
+//            Returns: M# (for moving) or S# (for stopped)
+        if (command[1] == 'T') { if (rot.moving()) strcpy(reply,"M"); else strcpy(reply,"S"); boolReply=false; } else
+// :rI#       Get mIn position (in degrees)
+//            Returns: n#
+        if (command[1] == 'I') { sprintf(reply,"%ld",(long)round(rot.getMin())); boolReply=false; } else
+// :rM#       Get Max position (in degrees)
+//            Returns: n#
+        if (command[1] == 'M') { sprintf(reply,"%ld",(long)round(rot.getMax())); boolReply=false; } else
+// :rD#       Get rotator degrees per step
+//            Returns: n.n#
+        if (command[1] == 'D') { dtostrf(1.0/rot.getStepsPerDegree(),7,5,reply); boolReply=false; } else
+// :rb#       Get rotator backlash amount in steps
+//            Return: n#
+        if (command[1] == 'b' && parameter[0] == 0) { sprintf(reply,"%ld",(long)rot.getBacklash()); boolReply=false; } else
+// :rb[n]#
+//            Set rotator backlash amount in steps
 //            Returns: 0 on failure
 //                     1 on success
-      if (command[1] == 'B') { if (dmsToDouble(&f1,&parameter[0],true,PM_HIGH)) rot.setBacklash(f*f1); else commandError=CE_PARAM_FORM; } else
+      if (command[1] == 'b') { if (atoi2((char*)&parameter[0],&i)) { if (!rot.setBacklash(i)) commandError=CE_PARAM_RANGE; } else commandError=CE_PARAM_FORM; } else
 // :rF#       Reset rotator at the home position
 //            Returns: Nothing
       if (command[1] == 'F' && parameter[0] == 0) { rot.reset(); boolReply=false; } else
@@ -1603,7 +1585,7 @@ void processCommands() {
       if (command[1] == 'S') {
         if (parameter[0] == '-') f=-1.0; else f=1.0;
         if (parameter[0] == '+' || parameter[0] == '-') i1=1; else i1=0;
-        if (dmsToDouble(&f1,&parameter[i1],true,PM_HIGH)) rot.setTarget(f*f1); else commandError=CE_PARAM_FORM;
+        if (dmsToDouble(&f1,(char *)&parameter[i1],false)) { if (!rot.setTarget(f*f1)) commandError=CE_SLEW_ERR_IN_STANDBY; } else commandError=CE_PARAM_FORM;
       } else commandError=CE_CMD_UNKNOWN;
      } else
 #endif
@@ -1655,6 +1637,16 @@ void processCommands() {
             #endif
             delay(50); SerialC.begin(baudRate[i]);
             boolReply=false; 
+#endif
+#if defined(HAL_SERIAL_D_ENABLED)
+          } else
+          if (process_command == COMMAND_SERIAL_D) {
+            SerialD.print("1"); 
+            #ifdef HAL_SERIAL_TRANSMIT
+            while (SerialD.transmit()); 
+            #endif
+            delay(50); SerialD.begin(baudRate[i]); 
+            boolReply=false;
 #endif
           } else commandError=CE_CMD_UNKNOWN;
         } else commandError=CE_PARAM_RANGE;
@@ -1837,14 +1829,14 @@ void processCommands() {
             static double encoderAxis2=0;
             case '0': // set encoder Axis1 value
               f=strtod(&parameter[3],&conv_end);
-              if ( (&parameter[3] != conv_end) && (f >= -999.9) && (f <= 999.9)) encoderAxis1=f; else commandError=CE_PARAM_RANGE;
+              if (&parameter[3] != conv_end && fabs(f) <= 360.0) encoderAxis1=f; else commandError=CE_PARAM_RANGE;
               break;
             case '1': // set encoder Axis2 value
               f=strtod(&parameter[3],&conv_end);
-              if ( (&parameter[3] != conv_end) && (f >= -999.9) && (f <= 999.9)) encoderAxis2=f; else commandError=CE_PARAM_RANGE;
+              if (&parameter[3] != conv_end && fabs(f) <= 360.0) encoderAxis2=f; else commandError=CE_PARAM_RANGE;
               break;
             case '2': // sync encoder to last values
-              if ( (parameter[3] == '1') && (parameter[4] == 0)) if (syncEnc(encoderAxis1,encoderAxis2)) commandError=CE_PARAM_RANGE;
+              if (parameter[3] == '1' && parameter[4] == 0) if (syncEnc(encoderAxis1,encoderAxis2)) commandError=CE_PARAM_RANGE;
               break;
             case '3': // re-enable setting OnStep to Encoders after a Sync 
               syncToEncodersOnly=false;
@@ -1969,9 +1961,15 @@ void processCommands() {
             } else commandError=CE_0;
           }
         } else
-#if MOUNT_TYPE == GEM
         if (parameter[0] == 'E') { // En: Simple value
+          long l;
           switch (parameter[1]) {
+            case '7': // stepsPerWormRotation
+              l=strtol(&parameter[3],NULL,10);
+              if (AXIS1_PEC != ON) l=0;
+              if (l >= 0 && l < 129600000) nv.writeLong(EE_stepsPerWormRotAxis1,l); else commandError=CE_PARAM_RANGE;
+              break;
+#if MOUNT_TYPE == GEM
             case '9': // minutes past meridianE
               f=(double)strtol(&parameter[3],NULL,10)/4.0;
               if (labs(f) <= 180) {
@@ -1988,10 +1986,10 @@ void processCommands() {
                 nv.write(EE_dpmW,round(i+128));
               } else commandError=CE_PARAM_RANGE;
               break;
+#endif
             default: commandError=CE_CMD_UNKNOWN;
           }
         } else
-#endif
 #if DEBUG != OFF
         if (parameter[0] == 'F') { // Fn: Debug
           switch (parameter[1]) {  // DebugF, EEPROM upload
@@ -2054,7 +2052,7 @@ void processCommands() {
         static bool dualAxis=false;
         if (command[1] == 'o') { rateCompensation=RC_FULL_RA; setTrackingRate(DefaultTrackingRate); } else // turn full compensation on, defaults to base sidereal tracking rate
         if (command[1] == 'r') { rateCompensation=RC_REFR_RA; setTrackingRate(DefaultTrackingRate); } else // turn refraction compensation on, defaults to base sidereal tracking rate
-        if (command[1] == 'n') { rateCompensation=RC_NONE; setTrackingRate(DefaultTrackingRate); } else    // turn refraction off, sidereal tracking rate resumes
+        if (command[1] == 'n') { rateCompensation=RC_NONE; dualAxis=false; setTrackingRate(DefaultTrackingRate); } else // turn refraction off, sidereal tracking rate resumes
         if (command[1] == '1') { dualAxis=false; } else                                                      // turn off dual axis tracking
         if (command[1] == '2') { dualAxis=true;  } else                                                      // turn on dual axis tracking
 #endif
@@ -2066,14 +2064,16 @@ void processCommands() {
         if (command[1] == 'R') { siderealInterval=masterSiderealInterval; boolReply=false; } else                  // reset master sidereal clock interval
         if (command[1] == 'K') { setTrackingRate(0.99953004401); rateCompensation=RC_NONE; boolReply=false; } else // king tracking rate 60.136Hz
         if (command[1] == 'e') {
-          if (!isSlewing() && !isHoming() && !isParked()) {
+          if (isParked()) commandError=CE_PARKED; else
+          if (trackingState == TrackingMoveTo || trackingSyncInProgress() || isHoming()) commandError=CE_MOUNT_IN_MOTION; else
+          {
             initGeneralError();
             trackingState=TrackingSidereal;
             enableStepperDrivers();
-          } else commandError=CE_MOUNT_IN_MOTION;
+          }
         } else
         if (command[1] == 'd') {
-          if (!isSlewing() && !isHoming()) trackingState=TrackingNone; else commandError=CE_MOUNT_IN_MOTION;
+          if (trackingState == TrackingMoveTo || trackingSyncInProgress() || isHoming()) commandError=CE_MOUNT_IN_MOTION; else trackingState=TrackingNone;
         } else
           commandError=CE_CMD_UNKNOWN;
 
@@ -2222,7 +2222,7 @@ void processCommands() {
           if (longitude < -360 || longitude > 360) { longitude=0.0; DLF("ERR, processCommands(): bad NV longitude"); }
           timeZone=nv.read(EE_sites+currentSite*25+8)-128;
           timeZone=decodeTimeZone(timeZone);
-          if (timeZone < -12 || timeZone > 14) { timeZone=0.0; DLF("ERR, processCommands(): bad NV timeZone"); }
+          if (timeZone < -14 || timeZone > 12) { timeZone=0.0; DLF("ERR, processCommands(): bad NV timeZone"); }
           updateLST(jd2last(JD,UT1,false));
         } else 
         if (command[1] == '?') {
@@ -2358,10 +2358,12 @@ void logErrors(const char ch[], char cmd[], char param[], CommandErrors cmdErr) 
 
 void focuserRotatorSave() {
 #if FOCUSER1 == ON
+  foc1.setTcfEnable(false);
   foc1.stopMove();
   foc1.savePosition();
 #endif
 #if FOCUSER2 == ON
+  foc2.setTcfEnable(false);
   foc2.stopMove();
   foc2.savePosition();
 #endif

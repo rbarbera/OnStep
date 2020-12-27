@@ -46,8 +46,8 @@
 #ifndef OneWirePin
   #define OneWirePin        PE0     // Default Pin for OneWire bus (on E2-MOT PD-EN, right hand pin)
 #endif
-#define ESP8266Gpio0Pin     PD0     // ESP8266 GPIO0 (on EXP1)
-#define ESP8266RstPin       PA4     // ESP8266 RST (on EXP2 shared with the DS3234 CS pin)
+#define AddonBootModePin    PD0     // ESP8266 GPIO0 (on EXP1)
+#define AddonResetPin       PA4     // ESP8266 RST (on EXP2 shared with the DS3234 CS pin)
 
 // The PEC index sense is a logic level input, resets the PEC index on rising edge then waits for 60 seconds before allowing another reset
 #define PecPin              PA1
@@ -66,54 +66,97 @@
 
 #define LimitPin            PA0     // Limit switch sense (on Z-)
 
+// Soft SPI bus to stepper drivers
+#if PINMAP == FYSETC_S6_2
+  #define SS_MOSI           PE14
+  #define Axis1_M0PORT      GPIOE
+  #define Axis1_M0BIT   GPIO_PIN_14
+  #define SS_SCK            PE12
+  #define Axis1_M1PORT      GPIOE
+  #define Axis1_M1BIT   GPIO_PIN_12
+  #define SS_MISO           PE13
+  #define Axis1_M3PORT       GPIOE
+  #define Axis1_M3BIT   GPIO_PIN_13
+#else
+  #define SS_MOSI           PA7
+  #define Axis1_M0PORT       GPIOA
+  #define Axis1_M0BIT   GPIO_PIN_7
+  #define SS_SCK            PA5
+  #define Axis1_M1PORT       GPIOA
+  #define Axis1_M1BIT   GPIO_PIN_5
+  #define SS_MISO           PA6
+  #define Axis1_M3PORT       GPIOA
+  #define Axis1_M3BIT   GPIO_PIN_6
+#endif
+
 // Axis1 RA/Azm step/dir driver
-#define Axis1_EN           PE12     // Enable
-#define Axis1_M0            PA7     // Microstep Mode 0 or SPI MOSI
-#define Axis1_M1            PA5     // Microstep Mode 1 or SPI SCK
+#if PINMAP == FYSETC_S6_2
+  #define Axis1_EN          PE9     // Enable
+#else
+  #define Axis1_EN         PE12     // Enable
+#endif
+#define Axis1_M0        SS_MOSI     // Microstep Mode 0 or SPI MOSI
+#define Axis1_M1         SS_SCK     // Microstep Mode 1 or SPI SCK
 #define Axis1_M2            PE7     // Microstep Mode 2 or SPI CS or Decay Mode
-#define Axis1_M3            PA6     // SPI MISO/Fault
+#define Axis1_M2PORT       GPIOE
+#define Axis1_M2BIT   GPIO_PIN_7
+#define Axis1_M3        SS_MISO     // SPI MISO/Fault
 #define Axis1_STEP         PE11     // Step
+#define Axis1_StpPORT      GPIOE
+#define Axis1_StpBIT GPIO_PIN_11
 #define Axis1_DIR          PE10     // Dir
+#define Axis1_DirPORT      GPIOE
+#define Axis1_DirBIT  GPIO_PIN_10
 #define Axis1_DECAY    Axis1_M2     // Decay mode
 #define Axis1_FAULT    Axis1_M3     // SPI MISO/Fault
 #define Axis1_HOME         PB14     // Sense home position Axis1 (on X-)
 
 // Axis2 Dec/Alt step/dir driver
 #define Axis2_EN            PD9     // Enable
-#define Axis2_M0            PA7     // Microstep Mode 0 or SPI MOSI
-#define Axis2_M1            PA5     // Microstep Mode 1 or SPI SCK
+#define Axis2_M0        SS_MOSI     // Microstep Mode 0 or SPI MOSI
+#define Axis2_M0PORT       Axis1_M0PORT
+#define Axis2_M0BIT        Axis1_M0BIT
+#define Axis2_M1         SS_SCK     // Microstep Mode 1 or SPI SCK
+#define Axis2_M1PORT       Axis1_M1PORT
+#define Axis2_M1BIT        Axis1_M1BIT
 #define Axis2_M2           PE15     // Microstep Mode 2 or SPI CS or Decay Mode
-#define Axis2_M3            PA6     // SPI MISO
+#define Axis2_M2PORT       GPIOE
+#define Axis2_M2BIT   GPIO_PIN_15
+#define Axis2_M3        SS_MISO     // SPI MISO
 #define Axis2_STEP          PD8     // Step
+#define Axis2_StpPORT      GPIOD
+#define Axis2_StpBIT  GPIO_PIN_8
 #define Axis2_DIR          PB12     // Dir
+#define Axis2_DirPORT      GPIOB
+#define Axis2_DirBIT  GPIO_PIN_12
 #define Axis2_DECAY    Axis2_M2     // Decay mode
 #define Axis2_FAULT    Axis2_M3     // SPI MISO/Fault
 #define Axis2_HOME         PB13     // Sense home position Axis2 (on Y-)
 
 // For rotator stepper driver
 #define Axis3_EN           PD15     // Enable
-#define Axis3_M0            PA7     // SPI MOSI
-#define Axis3_M1            PA5     // SPI SCK
+#define Axis3_M0        SS_MOSI     // SPI MOSI
+#define Axis3_M1         SS_SCK     // SPI SCK
 #define Axis3_M2           PD10     // SPI CS or Decay Mode
-#define Axis3_M3            PA6     // SPI MISO
+#define Axis3_M3        SS_MISO     // SPI MISO
 #define Axis3_STEP         PD14     // Step
 #define Axis3_DIR          PD13     // Dir
 
 // For focuser1 stepper driver
 #define Axis4_EN            PD4     // Enable
-#define Axis4_M0            PA7     // SPI MOSI
-#define Axis4_M1            PA5     // SPI SCK
+#define Axis4_M0        SS_MOSI     // SPI MOSI
+#define Axis4_M1         SS_SCK     // SPI SCK
 #define Axis4_M2            PD7     // SPI CS or Decay Mode
-#define Axis4_M3            PA6     // SPI MISO
+#define Axis4_M3        SS_MISO     // SPI MISO
 #define Axis4_STEP          PD5     // Step
 #define Axis4_DIR           PD6     // Dir
 
 // For focuser2 stepper driver
 #define Axis5_EN            PE5     // Enable
-#define Axis5_M0            PA7     // SPI MOSI
-#define Axis5_M1            PA5     // SPI SCK
+#define Axis5_M0        SS_MOSI     // SPI MOSI
+#define Axis5_M1         SS_SCK     // SPI SCK
 #define Axis5_M2           PC14     // SPI CS or Decay Mode
-#define Axis5_M3            PA6     // SPI MISO
+#define Axis5_M3        SS_MISO     // SPI MISO
 #define Axis5_STEP          PE6     // Step
 #define Axis5_DIR          PC13     // Dir
 

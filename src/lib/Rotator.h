@@ -18,6 +18,7 @@ class rotator {
       this->stepPin=stepPin;
       this->dirPin=dirPin;
       this->enPin=enPin;
+      this->nvAddress=nvAddress;
       this->maxRate=maxRate;
       this->spd=stepsPerDeg;
 
@@ -25,8 +26,8 @@ class rotator {
       setMin(min);
       setMax(max);
 
-      if (stepPin != -1) pinMode(stepPin,OUTPUT);
-      if (dirPin != -1) pinMode(dirPin,OUTPUT);
+      pinMode(stepPin,OUTPUT);
+      pinMode(dirPin,OUTPUT);
 
       // get backlash amount
       int b=nv.readInt(nvAddress+EE_rotBacklash);
@@ -58,18 +59,21 @@ class rotator {
       lastPhysicalMove=nextPhysicalMove;
     }
 
+    // get step size in degrees
+    double getStepsPerDegree() { return spd; }
+
     // minimum position in degrees
-    void setMin(double min) { smin=min*spd; if (smin < -180*3600 || smin > 180*3600) smin=0; if (smin > smax) smin=smax; backlashMax=(smax-smin)/10; if (backlashMax > 32767) backlashMax=32767; }
+    void setMin(double min) { smin=min*spd; if (smin < -180L*3600L || smin > 180*3600L) smin=0; if (smin > smax) smin=smax; backlashMax=(smax-smin)/10; if (backlashMax > 32767) backlashMax=32767; }
     double getMin() { return smin/spd; }
 
     // maximum position in degrees
-    void setMax(double max) { smax=max*spd; if (smax < -180*3600 || smax > 180*3600) smax=0; if (smax < smin) smax=smin; backlashMax=(smax-smin)/10; if (backlashMax > 32767) backlashMax=32767; }
+    void setMax(double max) { smax=max*spd; if (smax < -180L*3600L || smax > 180L*3600L) smax=0; if (smax < smin) smax=smin; backlashMax=(smax-smin)/10; if (backlashMax > 32767) backlashMax=32767; }
     double getMax() { return smax/spd; }
 
-    // backlash, in degrees
-    bool setBacklash(double b) { b=b*spd; if (b < 0 || b > backlashMax) return false; backlash = b; nv.writeInt(nvAddress+EE_rotBacklash,backlash); return true; }
-    double getBacklash() { return backlash/spd; }
-    
+    // backlash, in steps
+    bool setBacklash(int b) { if (b < 0 || b > backlashMax) return false; backlash = b; nv.writeInt(nvAddress+EE_rotBacklash,backlash); return true; }
+    int getBacklash() { return backlash; }
+
     // sets logic state for reverse motion
     void setReverseState(int reverseState) {
       this->reverseState=reverseState;
@@ -80,12 +84,12 @@ class rotator {
     void setDisableState(bool disableState) {
       this->disableState=disableState;
       if (disableState == LOW) enableState=HIGH; else enableState=LOW;
-      if (enPin != -1) { pinMode(enPin,OUTPUT); enableDriver(); currentlyDisabled=false; }
+      if (enPin != OFF && enPin != SHARED) { pinMode(enPin,OUTPUT); enableDriver(); currentlyDisabled=false; }
     }
 
     // allows enabling/disabling stepper driver
     void powerDownActive(bool active) {
-      if (enPin == -1) { pda=false; return; }
+      if (enPin == OFF || enPin == SHARED) active=false;
       pda=active;
       if (pda) { pinMode(enPin,OUTPUT); disableDriver(); currentlyDisabled=true; }
     }
@@ -149,6 +153,7 @@ class rotator {
 
     // move CW
     void startMoveCW() {
+      if (!movementAllowed()) return;
       if (mc) {
         delta.fixed=doubleToFixed(+moveRate/100.0); // in steps per centi-second
       } else {
@@ -161,6 +166,7 @@ class rotator {
 
     // move CCW
     void startMoveCCW() {
+      if (!movementAllowed()) return;
       if (mc) {
         delta.fixed=doubleToFixed(-moveRate/100.0); // in steps per centi-second
       } else {
@@ -184,19 +190,22 @@ class rotator {
 
     // sets current position in degrees
     void setPosition(double deg) {
-      spos=round(deg*spd);
+      spos=lround(deg*spd);
       if (spos < smin) spos=smin; if (spos > smax) spos=smax;
       target.part.m=spos; target.part.f=0;
     }
 
     // set target in degrees
-    void setTarget(double deg) {
-      target.part.m=(long)(deg*spd); target.part.f=0;
+    bool setTarget(double deg) {
+      if (!movementAllowed()) return false;
+      target.part.m=lround(deg*spd); target.part.f=0;
       if ((long)target.part.m < smin) target.part.m=smin; if ((long)target.part.m > smax) target.part.m=smax;
+      return true;
     }
 
     // do derotate movement
     void poll(bool tracking) {
+      if (!movementAllowed()) return;
       if (DR && tracking) target.fixed+=deltaDR.fixed;
       target.fixed+=delta.fixed;
       if (((long)target.part.m < smin) || ((long)target.part.m > smax)) { DR=false; delta.fixed=0; deltaDR.fixed=0; }
@@ -214,7 +223,10 @@ class rotator {
 #endif
     
     void follow(bool mountSlewing) {
-      if (pda && !currentlyDisabled && ((micros()-lastPhysicalMove) > 10000000L)) { currentlyDisabled=true; disableDriver(); }
+      if (!movementAllowed()) return;
+
+      // if enabled and the timeout has elapsed, disable the stepper driver
+      if (pda && !currentlyDisabled && ((long)(micros()-lastPhysicalMove) > 10000000L)) { disableDriver(); currentlyDisabled=true; }
 
       unsigned long microsNow=micros();
       if ((long)(microsNow-nextPhysicalMove) > 0) {
@@ -228,7 +240,7 @@ class rotator {
           if (pda && currentlyDisabled) { currentlyDisabled=false; enableDriver(); delayMicroseconds(5); }
           digitalWrite(stepPin,LOW); delayMicroseconds(5);
           digitalWrite(dirPin,forwardState); delayMicroseconds(5);
-          digitalWrite(stepPin,HIGH); spos++;
+          digitalWrite(stepPin,HIGH);
           if (backlashPos < backlash) { backlashPos++; backlashDir=BD_OUT; } else { spos++; backlashDir=BD_NONE; }
           lastPhysicalMove=micros();
         } else
@@ -236,7 +248,7 @@ class rotator {
           if (pda && currentlyDisabled) { currentlyDisabled=false; enableDriver(); delayMicroseconds(5); }
           digitalWrite(stepPin,LOW); delayMicroseconds(5);
           digitalWrite(dirPin,reverseState); delayMicroseconds(5);
-          digitalWrite(stepPin,HIGH); spos--;
+          digitalWrite(stepPin,HIGH);
           if (backlashPos > 0) { backlashPos--; backlashDir=BD_IN; } else { spos--; backlashDir=BD_NONE; }
           lastPhysicalMove=micros();
         }
@@ -246,13 +258,16 @@ class rotator {
     void savePosition() { writeTarget(); }
   
   private:
+    bool movementAllowed() {
+      if (enPin == SHARED && !axis1Enabled) return false; else return true;
+    }
     void writeTarget() {
       nv.writeLong(nvAddress+EE_rotSpos,spos);
       nv.writeInt(nvAddress+EE_rotBacklashPos,backlashPos);
     }
 
     void enableDriver() {
-      if (enPin == -1) return;
+      if (enPin == OFF || enPin == SHARED) return;
       // for Aux5/Aux6 (DAC) support for stepper driver EN control on MaxPCB
 #if defined(A21) && defined(A22)
       if (enPin == A21) { if (enableState == HIGH) analogWrite(A21,1024); else analogWrite(A21,0); return; }
@@ -262,7 +277,7 @@ class rotator {
     }
 
     void disableDriver() {
-      if (enPin == -1) return;
+      if (enPin == OFF || enPin == SHARED) return;
 #if defined(A21) && defined(A22)
       if (enPin == A21) { if (disableState == HIGH) analogWrite(A21,1024); else analogWrite(A21,0); return; }
       if (enPin == A22) { if (disableState == HIGH) analogWrite(A22,1024); else analogWrite(A22,0); return; }
